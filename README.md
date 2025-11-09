@@ -26,14 +26,6 @@ A collaboration between [**PlayAbility Adaptive Software**](https://www.playabil
 
 ---
 
-## How It Works
-
-1. A **Seeed XIAO BLE Sense** reads **roll/pitch** (and detects **shake**) via its IMU.
-2. **HID Remappe**by jfedo****r** firmware exposes those signals as s ****HID inputs** (mouse, keyboard, or gamepad).
-3. You tailor mappings in the **Web Config** and tune **angle limit**, **smoothing**, and **inversion**.
-
----
-
 ## Hardware
 
 Build OpenRudder with common parts:
