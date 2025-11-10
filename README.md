@@ -6,6 +6,9 @@ Tilt with your feet to steer a **virtual joystick**, move the **mouse**, or pres
 Built on the excellent [**HID Remapper by jfedor**](https://github.com/jfedor2/hid-remapper) project, with custom gyroscope support for the **Seeed XIAO BLE Sense**.
 A collaboration between [**PlayAbility Adaptive Software**](https://www.playability.gg/) and [**Hitclic**](https://hitclic.shop/).
 
+<img width="1922" height="1091" alt="Airbrush-Collage-2025-11-10T19_50_24" src="https://github.com/user-attachments/assets/72da7841-6f6a-4fd8-abfd-d2dec2ae0caf" />
+
+
 ---
 
 ## Quick Links
@@ -31,7 +34,7 @@ A collaboration between [**PlayAbility Adaptive Software**](https://www.playabil
 Build OpenRudder with common parts:
 
 * **Microcontroller**: Seeed **XIAO BLE Sense** (nRF52840, with IMU)
-* **Balance board**:  buy one at your sport shop or on ama[zon ](https://amzn.to/47KK38L)[https://amzn.to/47KK38L](https://amzn.to/47KK38L)
+* **Balance board**:  buy one at your sport shop or on Amazon [https://amzn.to/47KK38L](https://amzn.to/47KK38L)
 
 > Tip: Place the IMU close to the **rotation center** for the smoothest feel.
 
