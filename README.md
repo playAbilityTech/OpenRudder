@@ -13,7 +13,7 @@ A collaboration between [**PlayAbility Adaptive Software**](https://www.playabil
 
 ## Quick Links
 
-* **Latest custom firmware (.uf2)** → [Download](https://github.com/squirelo/hid-remapper/actions/runs/16246750706/artifacts/3520810322)
+* **Latest custom firmware (.uf2)** → [Download](https://github.com/playAbilityTech/OpenRudder/releases/tag/1.0.0)
 * **Web configuration** → [https://playabilitytech.github.io/OpenRudder/](https://playabilitytech.github.io/OpenRudder/)
 
 > Enumerates as standard **USB HID** (mouse, keyboard, gamepad) on Windows, macOS, and Linux.
