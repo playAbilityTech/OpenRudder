@@ -22,6 +22,7 @@
 #include <zephyr/usb/usb_device.h>
 
 #include "config.h"
+#include "gpio.h"
 #include "imu.h"
 #include "descriptor_parser.h"
 #include "globals.h"
@@ -902,9 +903,6 @@ void queue_get_feature_report(uint16_t interface, uint8_t report_id, uint8_t len
     // TODO
 }
 
-void set_gpio_inout_masks(uint32_t in_mask, uint32_t out_mask) {
-}
-
 int main() {
     LOG_INF("HID Remapper Bluetooth");
 
@@ -920,8 +918,10 @@ int main() {
     usb_init();
     scan_init();
     parse_our_descriptor();
+    gpio_pins_init();
     set_mapping_from_config();
-    
+    gpio_process_pending_dir();
+
     // Initialize 6-axis IMU AFTER mapping system is ready
 #if DT_NODE_EXISTS(DT_NODELABEL(lsm6ds3tr_c))
     if (imu_enabled) {
@@ -951,7 +951,9 @@ int main() {
             process_pending = true;
         }
         if (atomic_test_and_clear_bit(tick_pending, 0)) {
+            read_gpio(get_time());
             process_mapping(true);
+            write_gpio();
             process_pending = false;
         }
         if (!k_sem_take(&usb_sem0, K_NO_WAIT)) {
@@ -1003,6 +1005,7 @@ int main() {
             set_mapping_from_config();
             config_updated = false;
         }
+        gpio_process_pending_dir();
 
         if (their_descriptor_updated) {
             update_their_descriptor_derivates();
