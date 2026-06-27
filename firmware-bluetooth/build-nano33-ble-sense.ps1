@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $firmwareDir = $PSScriptRoot
 $repoRoot = Split-Path -Parent $firmwareDir
 $overlay = "boards/arm/arduino_nano_33_ble/arduino_nano_33_ble_sense_lsm9ds1.overlay"
+$config = "boards/arm/arduino_nano_33_ble/arduino_nano_33_ble_sense_lsm9ds1.conf"
 
 $dockerArgs = @(
     "run",
@@ -18,6 +19,7 @@ $dockerArgs = @(
     "-b", "arduino_nano_33_ble_sense",
     "-p", "always",
     "--",
+    "-DOVERLAY_CONFIG=$config",
     "-DDTC_OVERLAY_FILE=$overlay"
 )
 

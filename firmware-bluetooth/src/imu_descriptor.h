@@ -34,6 +34,17 @@ static const uint8_t imu_hid_report_desc_6dof[] = {
     0x66, 0x14, 0xF0,  //   Unit (m/s^2)
     0x81, 0x02,        //   Input (Data,Var,Abs)
 
+    // Microphone level
+    0x06, 0xFA, 0xFF,  //   Usage Page (Vendor-defined 0xFFFA)
+    0x09, 0x01,        //   Usage (Mic Level)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x26, 0x78, 0x00,  //   Logical Maximum (120)
+    0x75, 0x10,        //   Report Size (16 bits)
+    0x95, 0x01,        //   Report Count (1)
+    0x55, 0x00,        //   Unit Exponent (0)
+    0x65, 0x00,        //   Unit (None)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+
     0xC0,              // End Collection
 };
 
@@ -72,6 +83,17 @@ static const uint8_t imu_hid_report_desc_9dof[] = {
     0x66, 0x14, 0xF0,  //   Unit (m/s^2)
     0x81, 0x02,        //   Input (Data,Var,Abs)
 
+    // Microphone level
+    0x06, 0xFA, 0xFF,  //   Usage Page (Vendor-defined 0xFFFA)
+    0x09, 0x01,        //   Usage (Mic Level)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x26, 0x78, 0x00,  //   Logical Maximum (120)
+    0x75, 0x10,        //   Report Size (16 bits)
+    0x95, 0x01,        //   Report Count (1)
+    0x55, 0x00,        //   Unit Exponent (0)
+    0x65, 0x00,        //   Unit (None)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+
     0xC0,              // End Collection
 };
 
@@ -82,6 +104,7 @@ typedef struct {
     int16_t pitch;
     int16_t roll;
     uint16_t magnitude;
+    uint16_t mic_level;
 } __attribute__((packed)) imu_report_6dof_t;
 
 typedef struct {
@@ -89,6 +112,7 @@ typedef struct {
     int16_t pitch;
     int16_t roll;
     uint16_t magnitude;
+    uint16_t mic_level;
 } __attribute__((packed)) imu_report_9dof_t;
 
 #endif // _IMU_DESCRIPTOR_H_

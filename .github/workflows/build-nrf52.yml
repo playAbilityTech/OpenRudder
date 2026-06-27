@@ -26,7 +26,7 @@ jobs:
             extra_args: "-- \"-DOVERLAY_CONFIG=boards/arm/seeed_xiao_nrf52840/seeed_xiao_nrf52840_sense.conf\" \"-DDTC_OVERLAY_FILE=boards/arm/seeed_xiao_nrf52840/seeed_xiao_nrf52840_sense.overlay\""
           - board: "arduino_nano_33_ble_sense"
             name: "arduino_nano_33_ble_sense_lsm9ds1"
-            extra_args: "-- \"-DDTC_OVERLAY_FILE=boards/arm/arduino_nano_33_ble/arduino_nano_33_ble_sense_lsm9ds1.overlay\""
+            extra_args: "-- \"-DOVERLAY_CONFIG=boards/arm/arduino_nano_33_ble/arduino_nano_33_ble_sense_lsm9ds1.conf\" \"-DDTC_OVERLAY_FILE=boards/arm/arduino_nano_33_ble/arduino_nano_33_ble_sense_lsm9ds1.overlay\""
     steps:
       - uses: actions/checkout@v6
       - name: Build

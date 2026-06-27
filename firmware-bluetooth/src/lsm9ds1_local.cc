@@ -1,5 +1,5 @@
-#include "imu.h"
 #include "lsm9ds1_local.h"
+#include "motion_sensor.h"
 
 #include <stdint.h>
 #include <zephyr/device.h>
