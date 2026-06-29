@@ -26,6 +26,9 @@ uint32_t requested_secondary_index = 0;
 
 static const uint8_t DEFAULT_IMU_FILTER_BUFFER_SIZE = 10;
 static const uint8_t DEFAULT_IMU_MAX_ANGLE = 45;
+static const uint8_t DEFAULT_IMU_TWIST_DEADZONE = 2;
+static const uint8_t DEFAULT_IMU_TWIST_MAX_RATE = 90;
+static const uint8_t DEFAULT_IMU_YAW_LEAK_TIME = 3;
 
 static uint8_t clamp_u8(uint8_t value, uint8_t min_value, uint8_t max_value) {
     if (value < min_value) {
@@ -54,6 +57,9 @@ static void set_default_sensor_config() {
     imu_roll_deadzone = 0;
     imu_yaw_deadzone = 0;
     set_all_imu_max_angles(DEFAULT_IMU_MAX_ANGLE);
+    imu_twist_deadzone = DEFAULT_IMU_TWIST_DEADZONE;
+    imu_twist_max_rate = DEFAULT_IMU_TWIST_MAX_RATE;
+    imu_yaw_leak_time = DEFAULT_IMU_YAW_LEAK_TIME;
     imu_roll_inverted = false;
     imu_pitch_inverted = false;
     imu_yaw_inverted = false;
@@ -70,6 +76,9 @@ static void normalize_sensor_config() {
     imu_roll_neg_max_angle = clamp_u8(imu_roll_neg_max_angle, 1, 90);
     imu_yaw_pos_max_angle = clamp_u8(imu_yaw_pos_max_angle, 1, 90);
     imu_yaw_neg_max_angle = clamp_u8(imu_yaw_neg_max_angle, 1, 90);
+    imu_twist_deadzone = clamp_u8(imu_twist_deadzone, 0, 255);
+    imu_twist_max_rate = clamp_u8(imu_twist_max_rate, 1, 255);
+    imu_yaw_leak_time = clamp_u8(imu_yaw_leak_time, 0, 60);
 }
 
 static void fill_sensor_config(sensor_config_t* config) {
@@ -90,6 +99,9 @@ static void fill_sensor_config(sensor_config_t* config) {
     config->imu_roll_neg_max_angle = imu_roll_neg_max_angle;
     config->imu_yaw_pos_max_angle = imu_yaw_pos_max_angle;
     config->imu_yaw_neg_max_angle = imu_yaw_neg_max_angle;
+    config->imu_twist_deadzone = imu_twist_deadzone;
+    config->imu_twist_max_rate = imu_twist_max_rate;
+    config->imu_yaw_leak_time = imu_yaw_leak_time;
 }
 
 static void apply_sensor_config(const sensor_config_t* config) {
@@ -107,6 +119,9 @@ static void apply_sensor_config(const sensor_config_t* config) {
     imu_roll_neg_max_angle = config->imu_roll_neg_max_angle;
     imu_yaw_pos_max_angle = config->imu_yaw_pos_max_angle;
     imu_yaw_neg_max_angle = config->imu_yaw_neg_max_angle;
+    imu_twist_deadzone = config->imu_twist_deadzone;
+    imu_twist_max_rate = config->imu_twist_max_rate;
+    imu_yaw_leak_time = config->imu_yaw_leak_time;
     normalize_sensor_config();
 }
 
@@ -120,6 +135,9 @@ static void load_legacy_sensor_config(const persist_config_v19_t* config) {
     imu_roll_inverted = config->imu_roll_inverted;
     imu_pitch_inverted = config->imu_pitch_inverted;
     imu_yaw_inverted = false;
+    imu_twist_deadzone = DEFAULT_IMU_TWIST_DEADZONE;
+    imu_twist_max_rate = DEFAULT_IMU_TWIST_MAX_RATE;
+    imu_yaw_leak_time = DEFAULT_IMU_YAW_LEAK_TIME;
     normalize_sensor_config();
 }
 

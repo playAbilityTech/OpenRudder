@@ -50,6 +50,9 @@ imu_roll_pos_max_angle = config.get("imu_roll_pos_max_angle", legacy_imu_angle_c
 imu_roll_neg_max_angle = config.get("imu_roll_neg_max_angle", legacy_imu_angle_clamp_limit)
 imu_yaw_pos_max_angle = config.get("imu_yaw_pos_max_angle", legacy_imu_angle_clamp_limit)
 imu_yaw_neg_max_angle = config.get("imu_yaw_neg_max_angle", legacy_imu_angle_clamp_limit)
+imu_twist_deadzone = config.get("imu_twist_deadzone", DEFAULT_IMU_TWIST_DEADZONE)
+imu_twist_max_rate = config.get("imu_twist_max_rate", DEFAULT_IMU_TWIST_MAX_RATE)
+imu_yaw_leak_time = config.get("imu_yaw_leak_time", DEFAULT_IMU_YAW_LEAK_TIME)
 imu_roll_inverted = config.get("imu_roll_inverted", False)
 imu_pitch_inverted = config.get("imu_pitch_inverted", False)
 imu_yaw_inverted = config.get("imu_yaw_inverted", False)
@@ -83,7 +86,7 @@ sensor_flags |= SENSOR_CONFIG_FLAG_INVERT_PITCH if imu_pitch_inverted else 0
 sensor_flags |= SENSOR_CONFIG_FLAG_INVERT_YAW if imu_yaw_inverted else 0
 
 data = struct.pack(
-    "<BBB12B14B",
+    "<BBB15B11B",
     REPORT_ID_CONFIG,
     CONFIG_VERSION,
     SET_SENSOR_CONFIG,
@@ -98,8 +101,11 @@ data = struct.pack(
     imu_roll_neg_max_angle,
     imu_yaw_pos_max_angle,
     imu_yaw_neg_max_angle,
+    imu_twist_deadzone,
+    imu_twist_max_rate,
+    imu_yaw_leak_time,
     0,
-    *([0] * 14)
+    *([0] * 11)
 )
 device.send_feature_report(add_crc(data))
 

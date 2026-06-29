@@ -368,6 +368,9 @@ struct __attribute__((packed)) sensor_config_t {
     uint8_t imu_roll_neg_max_angle;
     uint8_t imu_yaw_pos_max_angle;
     uint8_t imu_yaw_neg_max_angle;
+    uint8_t imu_twist_deadzone;
+    uint8_t imu_twist_max_rate;
+    uint8_t imu_yaw_leak_time;
     uint8_t reserved0;
 };
 
@@ -399,7 +402,7 @@ struct __attribute__((packed)) set_config_t {
 };
 
 static_assert(sizeof(persist_config_v20_t) == 19, "persist_config_v20_t layout changed");
-static_assert(sizeof(sensor_config_t) == 12, "sensor_config_t layout changed");
+static_assert(sizeof(sensor_config_t) == 15, "sensor_config_t layout changed");
 static_assert(sizeof(get_config_t) <= 32, "get_config_t exceeds feature report payload");
 static_assert(sizeof(set_config_t) <= 30, "set_config_t exceeds feature report payload");
 static_assert(sizeof(sensor_config_t) <= 30, "sensor_config_t exceeds feature report payload");

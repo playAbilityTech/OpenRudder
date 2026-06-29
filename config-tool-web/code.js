@@ -19,6 +19,9 @@ const DEFAULT_MACRO_ENTRY_DURATION = 1;
 const DEFAULT_IMU_FILTER_BUFFER_SIZE = 10;
 const DEFAULT_IMU_DEADZONE = 0;
 const DEFAULT_IMU_MAX_ANGLE = 45;
+const DEFAULT_IMU_TWIST_DEADZONE = 2;
+const DEFAULT_IMU_TWIST_MAX_RATE = 90;
+const DEFAULT_IMU_YAW_LEAK_TIME = 3;
 
 const NLAYERS = 8;
 const NMACROS = 32;
@@ -37,6 +40,7 @@ const LAYERS_USAGE_PAGE = 0xFFF10000;
 const EXPR_USAGE_PAGE = 0xFFF30000;
 const MIDI_USAGE_PAGE = 0xFFF70000;
 const BUTTON_USAGE_PAGE = 0x00090000;
+const STANDARD_YAW_USAGE = '0x0020008d';
 
 const RESET_INTO_BOOTSEL = 1;
 const SET_CONFIG = 2;
@@ -172,6 +176,9 @@ let config = {
     'imu_roll_neg_max_angle': DEFAULT_IMU_MAX_ANGLE,
     'imu_yaw_pos_max_angle': DEFAULT_IMU_MAX_ANGLE,
     'imu_yaw_neg_max_angle': DEFAULT_IMU_MAX_ANGLE,
+    'imu_twist_deadzone': DEFAULT_IMU_TWIST_DEADZONE,
+    'imu_twist_max_rate': DEFAULT_IMU_TWIST_MAX_RATE,
+    'imu_yaw_leak_time': DEFAULT_IMU_YAW_LEAK_TIME,
     'imu_roll_inverted': false,
     'imu_pitch_inverted': false,
     'imu_yaw_inverted': false,
@@ -257,6 +264,9 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("imu_roll_neg_max_angle_input").addEventListener("change", imu_roll_neg_max_angle_onchange);
     document.getElementById("imu_yaw_pos_max_angle_input").addEventListener("change", imu_yaw_pos_max_angle_onchange);
     document.getElementById("imu_yaw_neg_max_angle_input").addEventListener("change", imu_yaw_neg_max_angle_onchange);
+    document.getElementById("imu_twist_deadzone_input").addEventListener("change", imu_twist_deadzone_onchange);
+    document.getElementById("imu_twist_max_rate_input").addEventListener("change", imu_twist_max_rate_onchange);
+    document.getElementById("imu_yaw_leak_time_input").addEventListener("change", imu_yaw_leak_time_onchange);
     document.getElementById("imu_filter_buffer_size_input").addEventListener("change", imu_filter_buffer_size_onchange);
     document.getElementById("imu_roll_inverted_checkbox").addEventListener("change", imu_roll_inverted_onchange);
     document.getElementById("imu_pitch_inverted_checkbox").addEventListener("change", imu_pitch_inverted_onchange);
@@ -347,8 +357,8 @@ async function load_from_device() {
         check_received_version(config_version);
 
         await send_feature_command(GET_SENSOR_CONFIG);
-        const [sensor_flags, imu_filter_buffer_size, imu_pitch_deadzone, imu_roll_deadzone, imu_yaw_deadzone, imu_pitch_pos_max_angle, imu_pitch_neg_max_angle, imu_roll_pos_max_angle, imu_roll_neg_max_angle, imu_yaw_pos_max_angle, imu_yaw_neg_max_angle] =
-            await read_config_feature([UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8]);
+        const [sensor_flags, imu_filter_buffer_size, imu_pitch_deadzone, imu_roll_deadzone, imu_yaw_deadzone, imu_pitch_pos_max_angle, imu_pitch_neg_max_angle, imu_roll_pos_max_angle, imu_roll_neg_max_angle, imu_yaw_pos_max_angle, imu_yaw_neg_max_angle, imu_twist_deadzone, imu_twist_max_rate, imu_yaw_leak_time] =
+            await read_config_feature([UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8, UINT8]);
 
         config['version'] = config_version;
         config['unmapped_passthrough_layers'] = mask_to_layer_list(unmapped_passthrough_layer_mask);
@@ -372,6 +382,9 @@ async function load_from_device() {
         config['imu_roll_neg_max_angle'] = imu_roll_neg_max_angle;
         config['imu_yaw_pos_max_angle'] = imu_yaw_pos_max_angle;
         config['imu_yaw_neg_max_angle'] = imu_yaw_neg_max_angle;
+        config['imu_twist_deadzone'] = imu_twist_deadzone;
+        config['imu_twist_max_rate'] = imu_twist_max_rate;
+        config['imu_yaw_leak_time'] = imu_yaw_leak_time;
         config['imu_roll_inverted'] = !!(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_ROLL);
         config['imu_pitch_inverted'] = !!(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_PITCH);
         config['imu_yaw_inverted'] = !!(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_YAW);
@@ -540,6 +553,9 @@ async function save_to_device() {
             [UINT8, config['imu_roll_neg_max_angle']],
             [UINT8, config['imu_yaw_pos_max_angle']],
             [UINT8, config['imu_yaw_neg_max_angle']],
+            [UINT8, config['imu_twist_deadzone']],
+            [UINT8, config['imu_twist_max_rate']],
+            [UINT8, config['imu_yaw_leak_time']],
             [UINT8, 0],
         ]);
         await send_feature_command(CLEAR_MAPPING);
@@ -732,6 +748,9 @@ function set_config_ui_state() {
     document.getElementById('imu_roll_neg_max_angle_input').value = config['imu_roll_neg_max_angle'] ?? DEFAULT_IMU_MAX_ANGLE;
     document.getElementById('imu_yaw_pos_max_angle_input').value = config['imu_yaw_pos_max_angle'] ?? DEFAULT_IMU_MAX_ANGLE;
     document.getElementById('imu_yaw_neg_max_angle_input').value = config['imu_yaw_neg_max_angle'] ?? DEFAULT_IMU_MAX_ANGLE;
+    document.getElementById('imu_twist_deadzone_input').value = config['imu_twist_deadzone'] ?? DEFAULT_IMU_TWIST_DEADZONE;
+    document.getElementById('imu_twist_max_rate_input').value = config['imu_twist_max_rate'] ?? DEFAULT_IMU_TWIST_MAX_RATE;
+    document.getElementById('imu_yaw_leak_time_input').value = config['imu_yaw_leak_time'] ?? DEFAULT_IMU_YAW_LEAK_TIME;
     document.getElementById('imu_roll_inverted_checkbox').checked = config['imu_roll_inverted'] ?? false;
     document.getElementById('imu_pitch_inverted_checkbox').checked = config['imu_pitch_inverted'] ?? false;
     document.getElementById('imu_yaw_inverted_checkbox').checked = config['imu_yaw_inverted'] ?? false;
@@ -846,6 +865,9 @@ function normalize_imu_config() {
     config['imu_roll_neg_max_angle'] = config['imu_roll_neg_max_angle'] ?? max_angle_default;
     config['imu_yaw_pos_max_angle'] = config['imu_yaw_pos_max_angle'] ?? max_angle_default;
     config['imu_yaw_neg_max_angle'] = config['imu_yaw_neg_max_angle'] ?? max_angle_default;
+    config['imu_twist_deadzone'] = config['imu_twist_deadzone'] ?? DEFAULT_IMU_TWIST_DEADZONE;
+    config['imu_twist_max_rate'] = config['imu_twist_max_rate'] ?? DEFAULT_IMU_TWIST_MAX_RATE;
+    config['imu_yaw_leak_time'] = config['imu_yaw_leak_time'] ?? DEFAULT_IMU_YAW_LEAK_TIME;
     config['imu_roll_inverted'] = config['imu_roll_inverted'] ?? false;
     config['imu_pitch_inverted'] = config['imu_pitch_inverted'] ?? false;
     config['imu_yaw_inverted'] = config['imu_yaw_inverted'] ?? false;
@@ -860,6 +882,9 @@ function normalize_imu_config() {
     normalize_numeric_config_value('imu_roll_neg_max_angle', DEFAULT_IMU_MAX_ANGLE, 1, 90);
     normalize_numeric_config_value('imu_yaw_pos_max_angle', DEFAULT_IMU_MAX_ANGLE, 1, 90);
     normalize_numeric_config_value('imu_yaw_neg_max_angle', DEFAULT_IMU_MAX_ANGLE, 1, 90);
+    normalize_numeric_config_value('imu_twist_deadzone', DEFAULT_IMU_TWIST_DEADZONE, 0, 255);
+    normalize_numeric_config_value('imu_twist_max_rate', DEFAULT_IMU_TWIST_MAX_RATE, 1, 255);
+    normalize_numeric_config_value('imu_yaw_leak_time', DEFAULT_IMU_YAW_LEAK_TIME, 0, 60);
     delete config['imu_angle_clamp_limit'];
     delete config['imu_tilt_deadzone'];
 }
@@ -1416,13 +1441,22 @@ function setup_usage_modal(source_or_target) {
         clear_children(element);
     }
     let template = document.getElementById('usage_button_template');
+    const add_usage_button = (usage, usage_def, usage_class = usage_def['class'], disabled_reason = null) => {
+        let clone = template.content.cloneNode(true).firstElementChild;
+        clone.innerText = usage_def['name'];
+        clone.title = disabled_reason ?? usage;
+        clone.setAttribute('data-hid-usage', usage);
+        if (disabled_reason !== null) {
+            clone.disabled = true;
+            clone.classList.add('disabled');
+            clone.setAttribute('aria-disabled', 'true');
+        }
+        usage_classes[usage_class].appendChild(clone);
+    };
+
     const add_usage_buttons = (relevant_usages) => {
         for (const [usage, usage_def] of Object.entries(relevant_usages)) {
-            let clone = template.content.cloneNode(true).firstElementChild;
-            clone.innerText = usage_def['name'];
-            clone.title = usage;
-            clone.setAttribute('data-hid-usage', usage);
-            usage_classes[usage_def['class']].appendChild(clone);
+            add_usage_button(usage, usage_def);
         }
     }
 
@@ -1437,14 +1471,27 @@ function setup_usage_modal(source_or_target) {
         known_usages = usages[config['our_descriptor_number']];
     }
 
-    for (const usage_ of extra_usages[source_or_target]) {
-        if (!(usage_ in known_usages)) {
-            let clone = template.content.cloneNode(true).firstElementChild;
-            clone.innerText = readable_usage_name(usage_);
-            clone.title = usage_;
-            clone.setAttribute('data-hid-usage', usage_);
-            usage_classes['extra'].appendChild(clone);
+    const extra_usage_list = [...extra_usages[source_or_target]];
+    for (const usage_ of extra_usage_list) {
+        if (source_or_target == 'source' && usage_ == STANDARD_YAW_USAGE) {
+            continue;
         }
+        if (!(usage_ in known_usages)) {
+            const usage_def = usages['source_extra'][usage_] ?? {
+                'name': readable_usage_name(usage_),
+                'class': 'extra',
+            };
+            add_usage_button(usage_, usage_def, 'extra');
+        }
+    }
+
+    if (source_or_target == 'source' && !(STANDARD_YAW_USAGE in known_usages)) {
+        const yaw_available = extra_usages['source'].includes(STANDARD_YAW_USAGE);
+        add_usage_button(
+            STANDARD_YAW_USAGE,
+            usages['source_extra'][STANDARD_YAW_USAGE],
+            'extra',
+            yaw_available ? null : 'Only available on 9DoF boards with magnetometer');
     }
 
     const search_box = modal_element.querySelector('.usage_search_box');
@@ -1667,6 +1714,18 @@ function imu_yaw_pos_max_angle_onchange() {
 
 function imu_yaw_neg_max_angle_onchange() {
     config['imu_yaw_neg_max_angle'] = clamp_number_input("imu_yaw_neg_max_angle_input", DEFAULT_IMU_MAX_ANGLE, 1, 90);
+}
+
+function imu_twist_deadzone_onchange() {
+    config['imu_twist_deadzone'] = clamp_number_input("imu_twist_deadzone_input", DEFAULT_IMU_TWIST_DEADZONE, 0, 255);
+}
+
+function imu_twist_max_rate_onchange() {
+    config['imu_twist_max_rate'] = clamp_number_input("imu_twist_max_rate_input", DEFAULT_IMU_TWIST_MAX_RATE, 1, 255);
+}
+
+function imu_yaw_leak_time_onchange() {
+    config['imu_yaw_leak_time'] = clamp_number_input("imu_yaw_leak_time_input", DEFAULT_IMU_YAW_LEAK_TIME, 0, 60);
 }
 
 function imu_roll_inverted_onchange() {
@@ -2149,11 +2208,11 @@ function usage_search_onchange(element) {
             const label = usage_button.innerText.toLowerCase().replaceAll(" ", "");
             usage_button.classList.toggle('d-none', !label.includes(query));
             usage_button.removeAttribute('data-preferred-result');
-            if (label.includes(query)) {
+            if (label.includes(query) && !usage_button.disabled) {
                 hits++;
                 last_match = usage_button;
             }
-            if (label == query) {
+            if (label == query && !usage_button.disabled) {
                 exact_match = usage_button;
             }
         });

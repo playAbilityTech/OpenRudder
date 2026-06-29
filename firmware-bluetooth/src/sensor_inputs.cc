@@ -34,6 +34,14 @@
 #define EXPECTED_DT_SECONDS 0.015f
 #define CALIBRATION_SAMPLE_DELAY_MS 5
 
+#define PI 3.14159265359f
+#define RAD_TO_DEG (180.0f / PI)
+#define DEG_TO_RAD (PI / 180.0f)
+
+#define RECENTER_GYRO_BIAS_SAMPLES 16
+#define STATIONARY_HOLD_SECONDS 0.25f
+#define TILT_COMPENSATION_MIN_COS_PITCH 0.25f
+
 #define MAX_FILTER_BUFFER_SIZE 16
 #define DEFAULT_IMU_FILTER_BUFFER_SIZE 10
 
@@ -60,6 +68,7 @@ typedef struct {
     float accel_trust_threshold_low;
     float bias_update_rate;
     float gyro_deadzone;
+    float gyro_stationary_threshold;
     float magnitude_filter_alpha;
 } imu_runtime_config_t;
 
@@ -72,6 +81,7 @@ static imu_runtime_config_t imu_config = {
     .accel_trust_threshold_low = 0.5f,
     .bias_update_rate = 0.001f,
     .gyro_deadzone = 0.001f,
+    .gyro_stationary_threshold = 0.0087f,
     .magnitude_filter_alpha = 0.9f
 };
 
@@ -100,6 +110,8 @@ static bool imu_paused = false;
 static volatile float pitch_offset = 0.0f;
 static volatile float roll_offset = 0.0f;
 static volatile float yaw_offset = 0.0f;
+static volatile float leaky_relative_yaw = 0.0f;
+static volatile bool recenter_requested = false;
 static bool orientation_offset_initialized = false;
 static bool yaw_reference_initialized = false;
 static int64_t last_timestamp = 0;
@@ -107,6 +119,12 @@ static int64_t last_timestamp = 0;
 static volatile float gyro_bias_x = 0.0f;
 static volatile float gyro_bias_y = 0.0f;
 static volatile float gyro_bias_z = 0.0f;
+static bool recenter_bias_pending = false;
+static int recenter_bias_count = 0;
+static float recenter_bias_sum_x = 0.0f;
+static float recenter_bias_sum_y = 0.0f;
+static float recenter_bias_sum_z = 0.0f;
+static float stationary_time = 0.0f;
 static float accel_bias_x = 0.0f;
 static float accel_bias_y = 0.0f;
 static float accel_bias_z = 0.0f;
@@ -143,6 +161,12 @@ static moving_avg_filter_t yaw_filter = {
     .initialized = false
 };
 
+static moving_avg_filter_t twist_rate_filter = {
+    .index = 0,
+    .count = 0,
+    .initialized = false
+};
+
 static float compute_dynamic_beta(float hp_magnitude) {
     if (hp_magnitude < imu_config.accel_trust_threshold_low) {
         return imu_config.beta_max;
@@ -167,18 +191,22 @@ static void reset_orientation_filters(void) {
     pitch_filter.size = adaptive_buffer_size;
     roll_filter.size = adaptive_buffer_size;
     yaw_filter.size = adaptive_buffer_size;
+    twist_rate_filter.size = adaptive_buffer_size;
 
     pitch_filter.initialized = false;
     roll_filter.initialized = false;
     yaw_filter.initialized = false;
+    twist_rate_filter.initialized = false;
 
     pitch_filter.count = 0;
     roll_filter.count = 0;
     yaw_filter.count = 0;
+    twist_rate_filter.count = 0;
 
     pitch_filter.index = 0;
     roll_filter.index = 0;
     yaw_filter.index = 0;
+    twist_rate_filter.index = 0;
 }
 
 static void refresh_filter_config(void) {
@@ -341,6 +369,13 @@ static uint8_t sanitize_deadzone(uint8_t value) {
     return value;
 }
 
+static uint8_t sanitize_rate_limit(uint8_t value) {
+    if (value < 1) {
+        return 1;
+    }
+    return value;
+}
+
 static void apply_angle_deadzone(float* angle, uint8_t deadzone_setting) {
     float deadzone = (float)sanitize_deadzone(deadzone_setting);
     if (deadzone <= 0.0f) {
@@ -396,6 +431,76 @@ static float apply_deadzone(float value, float deadzone) {
         return 0.0f;
     }
     return value > 0 ? value - deadzone : value + deadzone;
+}
+
+static void apply_rate_deadzone(float* rate, uint8_t deadzone_setting) {
+    float deadzone = (float)deadzone_setting;
+    if (deadzone <= 0.0f) {
+        return;
+    }
+
+    *rate = apply_deadzone(*rate, deadzone);
+}
+
+static float compute_tilt_compensated_yaw_rate(float roll, float pitch, float gy, float gz) {
+    float roll_rad = roll * DEG_TO_RAD;
+    float pitch_rad = pitch * DEG_TO_RAD;
+    float cos_pitch = cosf(pitch_rad);
+    if (fabsf(cos_pitch) < TILT_COMPENSATION_MIN_COS_PITCH) {
+        return gz;
+    }
+
+    return ((sinf(roll_rad) * gy) + (cosf(roll_rad) * gz)) / cos_pitch;
+}
+
+static void update_leaky_relative_yaw(float yaw_rate_dps, float dt) {
+    leaky_relative_yaw = motion_fusion_wrap_angle_180(leaky_relative_yaw + yaw_rate_dps * dt);
+
+    if (imu_yaw_leak_time > 0) {
+        leaky_relative_yaw *= expf(-dt / (float)imu_yaw_leak_time);
+    }
+}
+
+static void clear_recenter_bias_refresh(void) {
+    recenter_bias_pending = false;
+    recenter_bias_count = 0;
+    recenter_bias_sum_x = 0.0f;
+    recenter_bias_sum_y = 0.0f;
+    recenter_bias_sum_z = 0.0f;
+}
+
+static void start_recenter_bias_refresh(void) {
+    recenter_bias_pending = true;
+    recenter_bias_count = 0;
+    recenter_bias_sum_x = 0.0f;
+    recenter_bias_sum_y = 0.0f;
+    recenter_bias_sum_z = 0.0f;
+}
+
+static void update_recenter_bias_refresh(bool stationary, float gx_raw, float gy_raw, float gz_raw) {
+    if (!recenter_bias_pending) {
+        return;
+    }
+
+    if (!stationary) {
+        recenter_bias_count = 0;
+        recenter_bias_sum_x = 0.0f;
+        recenter_bias_sum_y = 0.0f;
+        recenter_bias_sum_z = 0.0f;
+        return;
+    }
+
+    recenter_bias_sum_x += gx_raw;
+    recenter_bias_sum_y += gy_raw;
+    recenter_bias_sum_z += gz_raw;
+    recenter_bias_count++;
+
+    if (recenter_bias_count >= RECENTER_GYRO_BIAS_SAMPLES) {
+        gyro_bias_x = recenter_bias_sum_x / recenter_bias_count;
+        gyro_bias_y = recenter_bias_sum_y / recenter_bias_count;
+        gyro_bias_z = recenter_bias_sum_z / recenter_bias_count;
+        clear_recenter_bias_refresh();
+    }
 }
 
 static void calibrate_orientation(float pitch, float roll, float yaw) {
@@ -466,8 +571,8 @@ static float moving_avg_filter_update(moving_avg_filter_t *filter, float input) 
     return sum / filter->count;
 }
 
-static void update_gyro_bias_if_stationary(float gx_raw, float gy_raw, float gz_raw, float hp_magnitude) {
-    if (hp_magnitude < imu_config.stationary_threshold) {
+static void update_gyro_bias_if_stationary(float gx_raw, float gy_raw, float gz_raw, bool stationary) {
+    if (stationary) {
         gyro_bias_x += imu_config.bias_update_rate * (gx_raw - gyro_bias_x);
         gyro_bias_y += imu_config.bias_update_rate * (gy_raw - gyro_bias_y);
         gyro_bias_z += imu_config.bias_update_rate * (gz_raw - gyro_bias_z);
@@ -516,6 +621,11 @@ static void imu_work_fn(struct k_work* work) {
             is_calibrated = true;
             magnitude_filter.alpha = imu_config.magnitude_filter_alpha;
             orientation_offset_initialized = false;
+            recenter_requested = false;
+            leaky_relative_yaw = 0.0f;
+            stationary_time = 0.0f;
+            clear_recenter_bias_refresh();
+            reset_orientation_filters();
             mic_level_init();
         } else {
             error_count++;
@@ -579,8 +689,30 @@ static void imu_work_fn(struct k_work* work) {
     float accel_mag = sqrtf(ax * ax + ay * ay + az * az);
     float filtered_mag = iir_update_magnitude(&magnitude_filter, accel_mag);
     float hp_magnitude = accel_mag - filtered_mag;
-    
-    update_gyro_bias_if_stationary(gx_raw, gy_raw, gz_raw, fabsf(hp_magnitude));
+
+    float gyro_mag = sqrtf(gx * gx + gy * gy + gz * gz);
+    bool stationary_sample =
+        fabsf(hp_magnitude) < imu_config.stationary_threshold &&
+        gyro_mag < imu_config.gyro_stationary_threshold;
+    stationary_time = stationary_sample ? stationary_time + dt : 0.0f;
+    bool stationary = stationary_time >= STATIONARY_HOLD_SECONDS;
+
+    update_recenter_bias_refresh(stationary, gx_raw, gy_raw, gz_raw);
+    update_gyro_bias_if_stationary(gx_raw, gy_raw, gz_raw, stationary);
+
+    gx = gx_raw - gyro_bias_x;
+    gy = gy_raw - gyro_bias_y;
+    gz = gz_raw - gyro_bias_z;
+
+    gx = apply_deadzone(gx, imu_config.gyro_deadzone);
+    gy = apply_deadzone(gy, imu_config.gyro_deadzone);
+    gz = apply_deadzone(gz, imu_config.gyro_deadzone);
+
+    if (stationary) {
+        gx = 0.0f;
+        gy = 0.0f;
+        gz = 0.0f;
+    }
     
     float beta = compute_dynamic_beta(fabsf(hp_magnitude));
     
@@ -596,18 +728,33 @@ static void imu_work_fn(struct k_work* work) {
     bool yaw_valid = has_magnetometer && yaw_reference_initialized;
     float yaw = yaw_valid ? motion_fusion_get_yaw() : 0.0f;
 
+    if (recenter_requested && (!has_magnetometer || yaw_valid)) {
+        recenter_requested = false;
+        calibrate_orientation(pitch, roll, yaw_valid ? yaw : 0.0f);
+        leaky_relative_yaw = 0.0f;
+        start_recenter_bias_refresh();
+        reset_orientation_filters();
+    }
+
     if (!orientation_offset_initialized && (!has_magnetometer || yaw_valid)) {
         calibrate_orientation(pitch, roll, yaw_valid ? yaw : 0.0f);
+        leaky_relative_yaw = 0.0f;
     }
 
     if (!orientation_offset_initialized) {
         k_work_reschedule(&imu_work, K_MSEC(IMU_SAMPLE_RATE_MS));
         return;
     }
+
+    float yaw_rate_dps = compute_tilt_compensated_yaw_rate(roll, pitch, gy, gz) * RAD_TO_DEG;
+    if (!has_magnetometer) {
+        update_leaky_relative_yaw(yaw_rate_dps, dt);
+    }
     
     float pitch_corrected = -(pitch - pitch_offset);
     float roll_corrected = roll - roll_offset;
-    float yaw_corrected = yaw_valid ? motion_fusion_wrap_angle_180(yaw - yaw_offset) : 0.0f;
+    float yaw_corrected = yaw_valid ? motion_fusion_wrap_angle_180(yaw - yaw_offset) : leaky_relative_yaw;
+    float twist_rate_corrected = yaw_rate_dps;
     
     if (imu_pitch_inverted) {
         pitch_corrected = -pitch_corrected;
@@ -617,18 +764,23 @@ static void imu_work_fn(struct k_work* work) {
     }
     if (imu_yaw_inverted) {
         yaw_corrected = -yaw_corrected;
+        twist_rate_corrected = -twist_rate_corrected;
     }
     
     pitch_corrected = moving_avg_filter_update(&pitch_filter, pitch_corrected);
     roll_corrected = moving_avg_filter_update(&roll_filter, roll_corrected);
     yaw_corrected = moving_avg_filter_update(&yaw_filter, yaw_corrected);
+    twist_rate_corrected = moving_avg_filter_update(&twist_rate_filter, twist_rate_corrected);
     
     apply_tilt_deadzone(&pitch_corrected, &roll_corrected);
     apply_yaw_deadzone(&yaw_corrected);
+    apply_rate_deadzone(&twist_rate_corrected, imu_twist_deadzone);
     
     yaw_corrected = clamp_angle_to_limits(yaw_corrected, imu_yaw_neg_max_angle, imu_yaw_pos_max_angle);
     pitch_corrected = clamp_angle_to_limits(pitch_corrected, imu_pitch_neg_max_angle, imu_pitch_pos_max_angle);
     roll_corrected = clamp_angle_to_limits(roll_corrected, imu_roll_neg_max_angle, imu_roll_pos_max_angle);
+    float twist_max_rate = (float)sanitize_rate_limit(imu_twist_max_rate);
+    twist_rate_corrected = fmaxf(-twist_max_rate, fminf(twist_max_rate, twist_rate_corrected));
 
     float yaw_neg_max = (float)sanitize_angle_limit(imu_yaw_neg_max_angle);
     float yaw_pos_max = (float)sanitize_angle_limit(imu_yaw_pos_max_angle);
@@ -639,6 +791,7 @@ static void imu_work_fn(struct k_work* work) {
     int16_t yaw_scaled = scale_angle_to_int16(yaw_corrected, -yaw_neg_max, yaw_pos_max);
     int16_t pitch_scaled = scale_angle_to_int16(pitch_corrected, -pitch_neg_max, pitch_pos_max);
     int16_t roll_scaled = scale_angle_to_int16(roll_corrected, -roll_neg_max, roll_pos_max);
+    int16_t twist_rate_scaled = scale_angle_to_int16(twist_rate_corrected, -twist_max_rate, twist_max_rate);
     uint16_t magnitude_scaled = scale_magnitude_to_uint16(hp_magnitude, 25.0f);
     uint16_t mic_level = mic_level_get();
 
@@ -646,6 +799,7 @@ static void imu_work_fn(struct k_work* work) {
         yaw_scaled = 0;
         pitch_scaled = 0;
         roll_scaled = 0;
+        twist_rate_scaled = 0;
         magnitude_scaled = 0;
         mic_level = 0;
     }
@@ -681,6 +835,8 @@ static void imu_work_fn(struct k_work* work) {
             imu_report_6dof_apds_t imu_report = {
                 .pitch = pitch_scaled,
                 .roll = roll_scaled,
+                .leaky_relative_yaw = yaw_scaled,
+                .twist_rate = twist_rate_scaled,
                 .magnitude = magnitude_scaled,
                 .mic_level = mic_level,
                 .proximity = apds_proximity,
@@ -695,6 +851,8 @@ static void imu_work_fn(struct k_work* work) {
             imu_report_6dof_t imu_report = {
                 .pitch = pitch_scaled,
                 .roll = roll_scaled,
+                .leaky_relative_yaw = yaw_scaled,
+                .twist_rate = twist_rate_scaled,
                 .magnitude = magnitude_scaled,
                 .mic_level = mic_level
             };
@@ -715,6 +873,10 @@ bool sensor_inputs_init() {
     is_calibrated = false;
     error_count = 0;
     imu_paused = false;
+    recenter_requested = false;
+    leaky_relative_yaw = 0.0f;
+    stationary_time = 0.0f;
+    clear_recenter_bias_refresh();
     for (int i = 0; i < 4; i++) {
         apds_gesture_latch_until[i] = 0;
     }
@@ -741,6 +903,10 @@ bool sensor_inputs_init() {
     if (imu_active) {
         orientation_offset_initialized = false;
         yaw_reference_initialized = false;
+        recenter_requested = false;
+        leaky_relative_yaw = 0.0f;
+        stationary_time = 0.0f;
+        clear_recenter_bias_refresh();
         motion_fusion_reset();
         motion_fusion_reset_mag_calibration();
         reset_orientation_filters();
@@ -771,7 +937,8 @@ bool sensor_inputs_init() {
 
 void sensor_inputs_recalibrate_orientation() {
     if (imu_active && is_calibrated) {
-        orientation_offset_initialized = false;
+        recenter_requested = true;
+        leaky_relative_yaw = 0.0f;
         reset_orientation_filters();
 
     }
@@ -785,6 +952,10 @@ void sensor_inputs_recalibrate_sensors() {
         motion_fusion_reset();
         orientation_offset_initialized = false;
         yaw_reference_initialized = false;
+        recenter_requested = false;
+        leaky_relative_yaw = 0.0f;
+        stationary_time = 0.0f;
+        clear_recenter_bias_refresh();
         motion_fusion_reset_mag_calibration();
         
         magnitude_filter = (iir_t){.y = 9.81f, .alpha = imu_config.magnitude_filter_alpha};

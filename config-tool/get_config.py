@@ -47,8 +47,11 @@ data = get_feature_report(device, REPORT_ID_CONFIG, CONFIG_SIZE + 1)
     imu_roll_neg_max_angle,
     imu_yaw_pos_max_angle,
     imu_yaw_neg_max_angle,
+    imu_twist_deadzone,
+    imu_twist_max_rate,
+    imu_yaw_leak_time,
     *_,
-) = struct.unpack_from("<12B", data, 1)
+) = struct.unpack_from("<15B", data, 1)
 crc = struct.unpack_from("<L", data, len(data) - 4)[0]
 check_crc(data, crc)
 
@@ -76,6 +79,9 @@ config = {
     "imu_roll_neg_max_angle": imu_roll_neg_max_angle,
     "imu_yaw_pos_max_angle": imu_yaw_pos_max_angle,
     "imu_yaw_neg_max_angle": imu_yaw_neg_max_angle,
+    "imu_twist_deadzone": imu_twist_deadzone,
+    "imu_twist_max_rate": imu_twist_max_rate,
+    "imu_yaw_leak_time": imu_yaw_leak_time,
     "imu_roll_inverted": bool(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_ROLL),
     "imu_pitch_inverted": bool(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_PITCH),
     "imu_yaw_inverted": bool(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_YAW),

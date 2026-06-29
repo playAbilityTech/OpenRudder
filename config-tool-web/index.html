@@ -288,6 +288,8 @@
 
             <div class="tab-pane" id="nav-sensors" role="tabpanel" tabindex="0">
 
+                <h5 class="mt-4">Onboard sensors</h5>
+
                 <div class="row mt-4">
                     <div class="col-4 text-end">
                         <label for="imu_enabled_checkbox" class="col-form-label">Enable onboard sensors</label>
@@ -307,35 +309,50 @@
                     </div>
                 </div>
                 <div class="row mt-3">
+                    <p><em>Changes to the onboard sensors enable setting are applied after re-plugging the device or HID Remapper.</em></p>
+                </div>
+
+                <hr class="my-4">
+
+                <h5>Filtering</h5>
+
+                <div class="row mt-3">
                     <div class="col-4 text-end">
-                        <label for="imu_pitch_deadzone_input" class="col-form-label">Pitch deadzone</label>
+                        <label for="imu_filter_buffer_size_input" class="col-form-label">Motion filter</label>
                     </div>
                     <div class="col-auto">
                         <div class="input-group">
-                            <input type="number" min="0" max="90" id="imu_pitch_deadzone_input" class="form-control text-end" style="max-width: 100px;">
-                            <span class="input-group-text">deg</span>
+                            <input type="number" min="1" max="16" id="imu_filter_buffer_size_input" class="form-control text-end" style="max-width: 100px;">
+                            <span class="input-group-text">samples</span>
                         </div>
-                        <div class="small text-muted mt-1">0 to 90 degrees</div>
+                        <div class="small text-muted mt-1">1 is most reactive, 16 is most stable</div>
                     </div>
                 </div>
+
+                <hr class="my-4">
+
+                <h5>Tilt inputs</h5>
+
                 <div class="row mt-3">
                     <div class="col-4 text-end">
-                        <label for="imu_roll_deadzone_input" class="col-form-label">Roll deadzone</label>
-                    </div>
-                    <div class="col-auto">
-                        <div class="input-group">
-                            <input type="number" min="0" max="90" id="imu_roll_deadzone_input" class="form-control text-end" style="max-width: 100px;">
-                            <span class="input-group-text">deg</span>
-                        </div>
-                        <div class="small text-muted mt-1">0 to 90 degrees</div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-4 text-end">
-                        <label class="col-form-label">Motion max angles</label>
+                        <label class="col-form-label">Pitch</label>
                     </div>
                     <div class="col-8">
                         <div class="row g-2">
+                            <div class="col-sm-4">
+                                <label for="imu_pitch_neg_max_angle_input" class="form-label small mb-1">Pitch -</label>
+                                <div class="input-group">
+                                    <input type="number" min="1" max="90" id="imu_pitch_neg_max_angle_input" class="form-control text-end">
+                                    <span class="input-group-text">deg</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label for="imu_pitch_deadzone_input" class="form-label small mb-1">Deadzone</label>
+                                <div class="input-group">
+                                    <input type="number" min="0" max="90" id="imu_pitch_deadzone_input" class="form-control text-end">
+                                    <span class="input-group-text">deg</span>
+                                </div>
+                            </div>
                             <div class="col-sm-4">
                                 <label for="imu_pitch_pos_max_angle_input" class="form-label small mb-1">Pitch +</label>
                                 <div class="input-group">
@@ -343,10 +360,27 @@
                                     <span class="input-group-text">deg</span>
                                 </div>
                             </div>
+                        </div>
+                        <div class="small text-muted mt-1">Deadzone: 0 to 90 degrees; max: 1 to 90 degrees per direction</div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-4 text-end">
+                        <label class="col-form-label">Roll</label>
+                    </div>
+                    <div class="col-8">
+                        <div class="row g-2">
                             <div class="col-sm-4">
-                                <label for="imu_pitch_neg_max_angle_input" class="form-label small mb-1">Pitch -</label>
+                                <label for="imu_roll_neg_max_angle_input" class="form-label small mb-1">Roll -</label>
                                 <div class="input-group">
-                                    <input type="number" min="1" max="90" id="imu_pitch_neg_max_angle_input" class="form-control text-end">
+                                    <input type="number" min="1" max="90" id="imu_roll_neg_max_angle_input" class="form-control text-end">
+                                    <span class="input-group-text">deg</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label for="imu_roll_deadzone_input" class="form-label small mb-1">Deadzone</label>
+                                <div class="input-group">
+                                    <input type="number" min="0" max="90" id="imu_roll_deadzone_input" class="form-control text-end">
                                     <span class="input-group-text">deg</span>
                                 </div>
                             </div>
@@ -357,78 +391,43 @@
                                     <span class="input-group-text">deg</span>
                                 </div>
                             </div>
-                            <div class="col-sm-4">
-                                <label for="imu_roll_neg_max_angle_input" class="form-label small mb-1">Roll -</label>
-                                <div class="input-group">
-                                    <input type="number" min="1" max="90" id="imu_roll_neg_max_angle_input" class="form-control text-end">
-                                    <span class="input-group-text">deg</span>
-                                </div>
-                            </div>
                         </div>
-                        <div class="small text-muted mt-1">1 to 90 degrees per direction</div>
+                        <div class="small text-muted mt-1">Deadzone: 0 to 90 degrees; max: 1 to 90 degrees per direction</div>
                     </div>
                 </div>
                 <div class="row mt-3">
                     <div class="col-4 text-end">
-                        <label for="imu_filter_buffer_size_input" class="col-form-label">Motion filter (stability)</label>
+                        <label class="col-form-label">Tilt axis direction</label>
                     </div>
                     <div class="col-auto">
-                        <div class="input-group">
-                            <input type="number" min="1" max="16" id="imu_filter_buffer_size_input" class="form-control text-end" style="max-width: 100px;">
-                            <span class="input-group-text">samples</span>
+                        <div class="form-check form-check-inline">
+                            <input type="checkbox" id="imu_pitch_inverted_checkbox" class="form-check-input">
+                            <label for="imu_pitch_inverted_checkbox" class="form-check-label">Invert pitch</label>
                         </div>
-                        <div class="small text-muted mt-1">1(reactive) to 16(stable)</div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-4 text-end">
-                        <label for="imu_roll_inverted_checkbox" class="col-form-label">Invert roll axis</label>
-                    </div>
-                    <div class="col-auto">
-                        <input type="checkbox" id="imu_roll_inverted_checkbox" class="form-check-input align-middle">
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-4 text-end">
-                        <label for="imu_pitch_inverted_checkbox" class="col-form-label">Invert pitch axis</label>
-                    </div>
-                    <div class="col-auto">
-                        <input type="checkbox" id="imu_pitch_inverted_checkbox" class="form-check-input align-middle">
-                    </div>
-                </div>
-                <div class="row mt-4">
-                    <div class="col-4 text-end">
-                        <label class="col-form-label">Yaw</label>
-                    </div>
-                    <div class="col-8">
-                        <div class="alert alert-secondary py-2 mb-0">Yaw requires a magnetometer and is only available on Arduino Nano 33 BLE Sense. It is not available on XIAO BLE Sense.</div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-4 text-end">
-                        <label for="imu_yaw_deadzone_input" class="col-form-label">Yaw deadzone</label>
-                    </div>
-                    <div class="col-auto">
-                        <div class="input-group">
-                            <input type="number" min="0" max="90" id="imu_yaw_deadzone_input" class="form-control text-end" style="max-width: 100px;">
-                            <span class="input-group-text">deg</span>
+                        <div class="form-check form-check-inline">
+                            <input type="checkbox" id="imu_roll_inverted_checkbox" class="form-check-input">
+                            <label for="imu_roll_inverted_checkbox" class="form-check-label">Invert roll</label>
                         </div>
-                        <div class="small text-muted mt-1">0 to 90 degrees</div>
                     </div>
                 </div>
+
+                <hr class="my-4">
+
+                <h5>Yaw and twist inputs</h5>
+
+                <div class="alert alert-secondary py-2 mt-3 mb-0">
+                    XIAO has no absolute yaw. On 6DoF boards, startup or recenter defines the current position as zero.
+                    Leaky Relative Yaw integrates twist motion from that zero and slowly returns to zero over the return time.
+                    Use a longer return time to hold a direction longer, or 0 to disable the virtual spring. Twist Rate is only twist speed and returns to zero when still.
+                    Standard Yaw remains magnetometer-backed 9DoF only.
+                </div>
+
                 <div class="row mt-3">
                     <div class="col-4 text-end">
-                        <label class="col-form-label">Yaw max angles</label>
+                        <label class="col-form-label">Yaw / leaky yaw</label>
                     </div>
                     <div class="col-8">
                         <div class="row g-2">
-                            <div class="col-sm-4">
-                                <label for="imu_yaw_pos_max_angle_input" class="form-label small mb-1">Yaw +</label>
-                                <div class="input-group">
-                                    <input type="number" min="1" max="90" id="imu_yaw_pos_max_angle_input" class="form-control text-end">
-                                    <span class="input-group-text">deg</span>
-                                </div>
-                            </div>
                             <div class="col-sm-4">
                                 <label for="imu_yaw_neg_max_angle_input" class="form-label small mb-1">Yaw -</label>
                                 <div class="input-group">
@@ -436,20 +435,68 @@
                                     <span class="input-group-text">deg</span>
                                 </div>
                             </div>
+                            <div class="col-sm-4">
+                                <label for="imu_yaw_deadzone_input" class="form-label small mb-1">Deadzone</label>
+                                <div class="input-group">
+                                    <input type="number" min="0" max="90" id="imu_yaw_deadzone_input" class="form-control text-end">
+                                    <span class="input-group-text">deg</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label for="imu_yaw_pos_max_angle_input" class="form-label small mb-1">Yaw +</label>
+                                <div class="input-group">
+                                    <input type="number" min="1" max="90" id="imu_yaw_pos_max_angle_input" class="form-control text-end">
+                                    <span class="input-group-text">deg</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="small text-muted mt-1">1 to 90 degrees per direction</div>
+                        <div class="small text-muted mt-1">Deadzone: 0 to 90 degrees; max: 1 to 90 degrees per direction</div>
                     </div>
                 </div>
                 <div class="row mt-3">
                     <div class="col-4 text-end">
-                        <label for="imu_yaw_inverted_checkbox" class="col-form-label">Invert yaw axis</label>
+                        <label class="col-form-label">Leaky yaw</label>
                     </div>
                     <div class="col-auto">
-                        <input type="checkbox" id="imu_yaw_inverted_checkbox" class="form-check-input align-middle">
+                        <div class="input-group">
+                            <input type="number" min="0" max="60" id="imu_yaw_leak_time_input" class="form-control text-end" style="max-width: 100px;">
+                            <span class="input-group-text">s</span>
+                        </div>
+                        <div class="small text-muted mt-1">Return time; 0 disables the virtual spring</div>
                     </div>
                 </div>
                 <div class="row mt-3">
-                    <p><em>Changes to the onboard sensors enable setting are applied after re-plugging the device or HID Remapper.</em></p>
+                    <div class="col-4 text-end">
+                        <label class="col-form-label">Twist rate</label>
+                    </div>
+                    <div class="col-8">
+                        <div class="row g-2">
+                            <div class="col-sm-4">
+                                <label for="imu_twist_deadzone_input" class="form-label small mb-1">Deadzone</label>
+                                <div class="input-group">
+                                    <input type="number" min="0" max="255" id="imu_twist_deadzone_input" class="form-control text-end">
+                                    <span class="input-group-text">deg/s</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label for="imu_twist_max_rate_input" class="form-label small mb-1">Max rate</label>
+                                <div class="input-group">
+                                    <input type="number" min="1" max="255" id="imu_twist_max_rate_input" class="form-control text-end">
+                                    <span class="input-group-text">deg/s</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="small text-muted mt-1">Deadzone: 0 to 255 degrees per second; max: 1 to 255 degrees per second</div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-4 text-end">
+                        <label class="col-form-label">Yaw axis direction</label>
+                    </div>
+                    <div class="col-auto">
+                        <input type="checkbox" id="imu_yaw_inverted_checkbox" class="form-check-input align-middle">
+                        <label for="imu_yaw_inverted_checkbox" class="form-check-label ms-1">Invert yaw and twist</label>
+                    </div>
                 </div>
 
             </div>

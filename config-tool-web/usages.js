@@ -13,11 +13,12 @@ const usages = {
         "0x00010038": { 'name': 'V scroll', 'class': 'mouse' },
         "0x000c0238": { 'name': 'H scroll', 'class': 'mouse' },
 
-        "0x0020008d": { 'name': 'Yaw', 'class': 'mouse' },
         "0x0020008e": { 'name': 'Pitch', 'class': 'mouse' },
         "0x0020008f": { 'name': 'Roll', 'class': 'mouse' },
         "0x00200073": { 'name': 'Shake', 'class': 'mouse' },
         "0xfffa0001": { 'name': 'Mic Level', 'class': 'mouse' },
+        "0xfffa0020": { 'name': 'Leaky Relative Yaw', 'class': 'mouse' },
+        "0xfffa0021": { 'name': 'Twist Rate', 'class': 'mouse' },
         "0xfffa0002": { 'name': 'Proximity', 'class': 'mouse' },
         "0xfffa0003": { 'name': 'Ambient Light', 'class': 'mouse' },
         "0xfffa0004": { 'name': 'Gesture X', 'class': 'mouse' },
@@ -71,6 +72,9 @@ const usages = {
         "0x00010034": { 'name': 'R2 axis', 'class': 'gamepad' },
         "0x000200c5": { 'name': 'Brake', 'class': 'mouse' },
         "0x000200c4": { 'name': 'Accelerator', 'class': 'mouse' },
+        "0x0020008d": { 'name': 'Yaw', 'class': 'mouse' },
+        "0xfffa0020": { 'name': 'Leaky Relative Yaw', 'class': 'mouse' },
+        "0xfffa0021": { 'name': 'Twist Rate', 'class': 'mouse' },
     },
     'source': {
         "0x000700e0": { 'name': 'Left Control', 'class': 'keyboard' },
@@ -217,11 +221,12 @@ const usages = {
 
         "0x00000000": { 'name': 'Nothing', 'class': 'other' },
 
-        "0x0020008d": { 'name': 'Yaw', 'class': 'mouse' },
         "0x0020008e": { 'name': 'Pitch', 'class': 'mouse' },
         "0x0020008f": { 'name': 'Roll', 'class': 'mouse' },
         "0x00200073": { 'name': 'Shake', 'class': 'mouse' },
         "0xfffa0001": { 'name': 'Mic Level', 'class': 'mouse' },
+        "0xfffa0020": { 'name': 'Leaky Relative Yaw', 'class': 'mouse' },
+        "0xfffa0021": { 'name': 'Twist Rate', 'class': 'mouse' },
         "0xfffa0002": { 'name': 'Proximity', 'class': 'mouse' },
         "0xfffa0003": { 'name': 'Ambient Light', 'class': 'mouse' },
         "0xfffa0004": { 'name': 'Gesture X', 'class': 'mouse' },

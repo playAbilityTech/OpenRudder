@@ -23,6 +23,19 @@ static const uint8_t imu_hid_report_desc_6dof[] = {
     0x09, 0x8F,        //   Usage (Orientation: Roll)
     0x81, 0x02,        //   Input (Data,Var,Abs)
 
+    // Leaky relative yaw and twist rate
+    0x06, 0xFA, 0xFF,  //   Usage Page (Vendor-defined 0xFFFA)
+    0x09, 0x20,        //   Usage (Leaky Relative Yaw)
+    0x16, 0x00, 0x80,  //   Logical Minimum (-32768)
+    0x26, 0xFF, 0x7F,  //   Logical Maximum (+32767)
+    0x75, 0x10,        //   Report Size (16 bits)
+    0x95, 0x01,        //   Report Count (1)
+    0x55, 0x00,        //   Unit Exponent (0)
+    0x65, 0x00,        //   Unit (None)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+    0x09, 0x21,        //   Usage (Twist Rate)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+
     // Acceleration Magnitude
     0x05, 0x20,        //   Usage Page (Sensor)
     0x09, 0x73,        //   Usage (Motion: Acceleration)
@@ -115,6 +128,19 @@ static const uint8_t imu_hid_report_desc_6dof_apds[] = {
 
     // Roll (rotation around Y-axis)
     0x09, 0x8F,        //   Usage (Orientation: Roll)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+
+    // Leaky relative yaw and twist rate
+    0x06, 0xFA, 0xFF,  //   Usage Page (Vendor-defined 0xFFFA)
+    0x09, 0x20,        //   Usage (Leaky Relative Yaw)
+    0x16, 0x00, 0x80,  //   Logical Minimum (-32768)
+    0x26, 0xFF, 0x7F,  //   Logical Maximum (+32767)
+    0x75, 0x10,        //   Report Size (16 bits)
+    0x95, 0x01,        //   Report Count (1)
+    0x55, 0x00,        //   Unit Exponent (0)
+    0x65, 0x00,        //   Unit (None)
+    0x81, 0x02,        //   Input (Data,Var,Abs)
+    0x09, 0x21,        //   Usage (Twist Rate)
     0x81, 0x02,        //   Input (Data,Var,Abs)
 
     // Acceleration Magnitude
@@ -340,6 +366,8 @@ static const uint8_t apds9960_hid_report_desc[] = {
 typedef struct {
     int16_t pitch;
     int16_t roll;
+    int16_t leaky_relative_yaw;
+    int16_t twist_rate;
     uint16_t magnitude;
     uint16_t mic_level;
 } __attribute__((packed)) imu_report_6dof_t;
@@ -355,6 +383,8 @@ typedef struct {
 typedef struct {
     int16_t pitch;
     int16_t roll;
+    int16_t leaky_relative_yaw;
+    int16_t twist_rate;
     uint16_t magnitude;
     uint16_t mic_level;
     uint16_t proximity;
