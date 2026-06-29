@@ -356,6 +356,35 @@ static void apply_yaw_deadzone(float* yaw) {
     apply_angle_deadzone(yaw, imu_yaw_deadzone);
 }
 
+static void apply_tilt_deadzone(float* pitch, float* roll) {
+    float pitch_deadzone = (float)sanitize_deadzone(imu_pitch_deadzone);
+    float roll_deadzone = (float)sanitize_deadzone(imu_roll_deadzone);
+
+    if (pitch_deadzone <= 0.0f && roll_deadzone <= 0.0f) {
+        return;
+    }
+
+    float pitch_component = 0.0f;
+    float roll_component = 0.0f;
+
+    if (pitch_deadzone > 0.0f) {
+        pitch_component = *pitch / pitch_deadzone;
+    } else if (*pitch != 0.0f) {
+        return;
+    }
+
+    if (roll_deadzone > 0.0f) {
+        roll_component = *roll / roll_deadzone;
+    } else if (*roll != 0.0f) {
+        return;
+    }
+
+    if ((pitch_component * pitch_component) + (roll_component * roll_component) < 1.0f) {
+        *pitch = 0.0f;
+        *roll = 0.0f;
+    }
+}
+
 static float clamp_angle_to_limits(float angle, uint8_t negative_limit, uint8_t positive_limit) {
     float min_angle = -(float)sanitize_angle_limit(negative_limit);
     float max_angle = (float)sanitize_angle_limit(positive_limit);
@@ -594,8 +623,7 @@ static void imu_work_fn(struct k_work* work) {
     roll_corrected = moving_avg_filter_update(&roll_filter, roll_corrected);
     yaw_corrected = moving_avg_filter_update(&yaw_filter, yaw_corrected);
     
-    apply_angle_deadzone(&pitch_corrected, imu_pitch_deadzone);
-    apply_angle_deadzone(&roll_corrected, imu_roll_deadzone);
+    apply_tilt_deadzone(&pitch_corrected, &roll_corrected);
     apply_yaw_deadzone(&yaw_corrected);
     
     yaw_corrected = clamp_angle_to_limits(yaw_corrected, imu_yaw_neg_max_angle, imu_yaw_pos_max_angle);

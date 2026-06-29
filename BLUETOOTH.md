@@ -16,6 +16,7 @@ Precompiled binaries are available for:
 
 * [Adafruit Feather nRF52840 Express](https://www.adafruit.com/product/4062)
 * [Seeed Studio Xiao nRF52840](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html)
+* [Seeed Studio Xiao nRF52840 Sense](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5251.html)
 
 To flash the [nRF firmware](firmware-bluetooth) on Adafruit Feather or Seeed Xiao boards, first put the board in flashing mode by double clicking the reset button quickly. A drive should appear on your computer. Copy the [UF2 file that matches your board](https://github.com/jfedor2/hid-remapper/releases/latest) to that drive and that's it. If you want to flash a newer version of the firmware in the future, you can also put the board in firmware flashing mode using the HID Remapper [web configuration tool](https://www.remapper.org/config/).
 
@@ -29,6 +30,14 @@ For local Nano 33 BLE Sense builds on Windows:
 ```
 
 The flash script expects Arduino IDE plus the Arduino Mbed OS Nano Boards package to be installed so it can find Arduino's `bossac.exe`.
+
+For local Xiao nRF52840 Sense builds on Windows:
+
+```powershell
+.\firmware-bluetooth\build-xiao-nrf52840-sense.ps1
+```
+
+Flash `firmware-bluetooth\build-xiao-sense\zephyr\remapper.uf2` by double tapping reset and copying it to the UF2 drive.
 
 To connect Bluetooth devices to the remapper, put the device in pairing mode, then put HID Remapper in pairing mode by pressing the user switch button or clicking **Pair new device** in the web configuration tool (on Seeed Xiao, short pin 0 to GND: short press to pair, hold > 3 s to forget all). The remapper automatically enters pairing mode if no devices are paired.
 

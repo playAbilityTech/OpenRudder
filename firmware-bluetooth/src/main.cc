@@ -1009,12 +1009,19 @@ int main() {
     if (imu_enabled) {
         if (!sensor_inputs_init()) {
             LOG_ERR("Failed to initialize onboard sensors");
+        } else {
+            set_mapping_from_config();
+            their_descriptor_updated = false;
         }
     } else {
         LOG_INF("Onboard sensors disabled in configuration - skipping sensor initialization");
     }
 #else
-    LOG_INF("Onboard sensors not available on this board - skipping sensor initialization");
+    if (imu_enabled) {
+        LOG_ERR("Onboard sensors enabled, but this firmware was built without onboard sensor support");
+    } else {
+        LOG_INF("Onboard sensors not available on this board - skipping sensor initialization");
+    }
 #endif
 
     k_work_reschedule(&scan_start_work, K_MSEC(SCAN_DELAY_MS));

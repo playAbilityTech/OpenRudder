@@ -3,3 +3,4 @@ firmware-bluetooth/build
 firmware/build
 firmware/build-*
 /firmware-bluetooth/build-xiao
+/firmware-bluetooth/build-xiao-sense
