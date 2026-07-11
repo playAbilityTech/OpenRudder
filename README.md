@@ -1,48 +1,73 @@
-# HID Remapper
+# MoveStick — Open-Source Motion Controller
 
-_For user documentation please see the project's website at [remapper.org](https://www.remapper.org/)._
+_This project was previously named **OpenRudder**._
 
-This is a configurable USB dongle that allows you to remap inputs from mice, keyboards and other devices. It works completely in hardware and requires no software running on the computer during normal use.
+**MoveStick** turns any movement into game controls.
 
-It can do things like reassign buttons, change keyboard layouts, map mouse buttons to keyboard inputs, map keystrokes to mouse inputs, change mouse sensitivity (permanently or when a button is held), rotate mouse axes by arbitrary (non-90 degree) angles, drag-lock for mouse buttons, scroll by moving the mouse, and much more.
+Attach it to anything — your hand, a cap, a balance board, a wheelchair joystick — and tilt to control a **virtual joystick**, **mouse**, or **keyboard/gamepad** buttons. No drivers, no proprietary hardware.
 
-It is configurable [through a web browser](https://www.remapper.org/config/) using WebHID (Chrome or Chrome-based browser required).
+Built on the excellent [**HID Remapper by jfedor**](https://github.com/jfedor2/hid-remapper), with custom gyroscope support for the **Seeed XIAO BLE Sense**.
 
-Wireless receivers are supported and multiple devices can be connected at the same time using a USB hub (with different mappings for each device if desired).
+A collaboration between [**PlayAbility Adaptive Software**](https://www.playability.gg/) and [**HitClic**](https://hitclic.shop/).
 
-In addition to the remapping functionality, it can do polling rate overclocking up to 1000 Hz.
+> 💡 **Don't want to build it yourself?** [Buy a ready-made MoveStick from HitClic](https://hitclic.shop/en/products/joystick-movestick-a-detection-de-mouvement)
 
-A separate [serial](SERIAL.md) version of the remapper takes inputs from a serial (RS-232) mouse and translates them to USB.
+---
 
-There's also a [Bluetooth](BLUETOOTH.md) version that runs on nRF52840-based boards, which translates Bluetooth inputs to USB.
+## ✨ What You Can Do
 
-![HID Remapper](images/remapper1.jpg)
+| Attach to... | Control with... | Use case |
+|--------------|-----------------|----------|
+| **Hand** (velcro strap) | Hand tilt | Joystick replacement |
+| **Cap / Headband** | Head movement | Hands-free aiming/steering |
+| **Balance board** | Feet tilt | Racing games, fitness |
+| **Wheelchair joystick** | Existing movements | Smartphone/PC control |
+| **Any surface** | Your imagination | Adaptive gaming setups |
 
-## How to make the device
+### Features
+- 🎮 **Virtual joystick** — map Roll/Pitch to any gamepad stick
+- 🖱️ **Motion mouse** — tilt to move cursor, tap/shake to click  
+- ⌨️ **Keyboard/buttons** — trigger A/B/X/Y, space, WASD from tilt angles
+- 🔗 **Bluetooth hub** — connect multiple BT devices and merge into one controller
+- ♿ **Adaptive ready** — works with Xbox Adaptive Controller, Hori Flex, PS Access
 
-There are three main ways of making the HID Remapper. You can either buy [this board](https://www.adafruit.com/product/5723) from Adafruit, make it yourself using a Raspberry Pi Pico (or two), or you can use the provided files to manufacture a custom board at JLCPCB or a similar service. The functionality is the same in all cases.
+---
 
-If you get the Feather RP2040 USB Host board from Adafruit, the device is ready to use, you just need to flash it with the right firmware ([remapper\_feather.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_feather.uf2)). Hold the "Boot" button on the board, then press the "Reset" button. A USB drive should show up on your computer. Copy the UF2 file to that drive. That's it.
+## 🔗 Quick Links
 
-See [here](HARDWARE.md) for details on how to make the Pico variants of the device and [here](custom-boards/) for details on the custom board option.
+| Resource | Link |
+|----------|------|
+| **Firmware (.uf2)** | [Download latest release](https://github.com/playAbilityTech/MoveStick/releases) |
+| **Web Configuration** | [playabilitytech.github.io/MoveStick](https://playabilitytech.github.io/MoveStick/) |
+| **Buy ready-made** | [HitClic Shop](https://hitclic.shop/en/products/joystick-movestick-a-detection-de-mouvement) |
 
-## How to use the configuration tool
+> Works on **Windows**, **macOS**, and **Linux** — enumerates as standard USB HID.
 
-A live version of the web configuration tool can be found at [remapper.org/config](https://www.remapper.org/config/).
+---
 
-For details on how to use it, please see the [HID Remapper Manual](https://www.remapper.org/manual/).
+## 🛠️ Hardware (DIY)
 
-If you can't use the browser-based configuration tool, there's also a [command-line tool](config-tool) that takes JSON in the same format as the web tool on standard input. I only tested it on Linux, but in theory it should also run on Windows and Mac.
+Build your own MoveStick for under $25:
 
-## How to update the firmware
+| Part | Price | Link |
+|------|-------|------|
+| **Seeed XIAO BLE Sense** (nRF52840 + IMU) | ~$15-20 | [Seeed Studio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) / [Gotronic](https://www.gotronic.fr/art-carte-xiao-ble-nrf52840-sense-34719.htm) |
+| **USB-C cable** | ~$5 | Any USB-C data cable |
+
+**Optional accessories:**
+- Balance board → [Amazon](https://amzn.to/47KK38L)
+- Velcro strap (for hand/cap mounting)
+- 3D printed case → see `/enclosure` folder
 
 The procedure to update the firmware is similar on all variants. When you go to the configuration website and try to connect to your device when it doesn't have the latest firmware, you will get a message and a link to a version of the configuration interface that is compatible with your current (old) firmware. Click that link, connect to your HID Remapper by clicking "Open device" as usual, then go to the "Actions" tab and click "Flash firmware". This will put your device in firmware flashing mode. A drive should appear on your computer. For all the RP2040-based variants, the drive will be named "RPI-RP2". For the Bluetooth variants, it will be called something else, depending on what board you're using. Download the correct firmware file for your variant (see table below) and copy it to that drive. On custom boards v1, v2, v5, v6 and v7 (dual RP2040 boards), after flashing the firmware you have to disconnect and reconnect your HID Remapper. That's it, you can go back to the regular version of the configuration interface and carry on.
 
 _(Please note that previously a manual "Flash B side" step was required on custom boards v1, v2, v5, v6 and v7. That is no longer necessary.)_
 
-If you're using the dual Pico variant then you need to flash the A side using the [remapper\_dual\_a.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_dual_a.uf2) file as described above and then flash the B side manually. Disconnect your HID Remapper from your computer, disconnect the OTG adapter from the B-side Pico, hold the BOOTSEL button on the B-side Pico and then, while holding the button, connect the B-side Pico to your computer. A drive named "RPI-RP2" should appear. Copy the [remapper\_dual\_b.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_dual_b.uf2) file to that drive. Disconnect the B-side Pico from your computer, reconnect the OTG adapter and reconnect your HID Remapper to your computer.
+## ⚡ Flash the Firmware
 
-When updating firmware, the current configuration on your HID Remapper is preserved. For extra peace of mind you can export your configuration to a JSON file before performing the update. That way if you need to revert to the old version of the firmware for any reason, you'll be able to import the configuration from the JSON file (configuration is lost when going from a newer firmware to an older firmware).
+1. **Enter bootloader mode**  
+   - Hold **BOOT** + tap **RESET** (or double-tap RESET quickly)
+   - A USB drive named `XIAO-SENSE` appears
 
 variant | firmware file(s) | notes
 ------- | ---------------- | -----------------------
@@ -64,40 +89,101 @@ serial | [remapper_serial.uf2](https://github.com/jfedor2/hid-remapper/releases/
 
 For boards not listed above, use the same file name you used when flashing it for the first time.
 
-## How to compile the firmware
+3. **Done!** The board reboots as a USB HID device
 
-The easiest way to compile the firmware is to let GitHub do it for you. This repository has GitHub Actions that build the firmware, so you can just fork, make your changes, wait for the job to complete, and look for the binaries in the artifacts produced.
+> 💡 If the drive doesn't appear, try a different USB cable (must support data, not charge-only)
 
-To compile the RP2040 firmware on your machine, use the following steps (details may vary depending on your Linux distribution):
+---
 
+## ⚙️ Configuration
+
+Open the **Web Config Tool**: [playabilitytech.github.io/MoveStick](https://playabilitytech.github.io/MoveStick/)
+
+### Basic Setup
+
+1. **Connect** your MoveStick via USB
+2. Click **"Open Device"** in the web tool
+3. Go to **Settings → IMU support → ON**
+4. Load an example profile or create your own mapping
+
+### Tuning Options
+
+| Setting | What it does |
+|---------|--------------|
+| **Angle limit** | Max tilt angle before output saturates |
+| **Buffer size** | Smoothing (higher = smoother but more latency) |
+| **Axis inversion** | Flip X/Y directions |
+| **Shake threshold** | Sensitivity for tap/shake detection |
+
+### Mapping
+
+Map motion axes to any output:
+- **Roll (X)** → mouse X, left stick X, arrow keys...
+- **Pitch (Y)** → mouse Y, left stick Y, WASD...
+- **Shake** → click, button A, space, etc.
+
+---
+
+## 📦 Ready-Made Profiles
+
+### Mouse Control
 ```
-sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib srecord
-git clone https://github.com/jfedor2/hid-remapper.git
-cd hid-remapper
-git submodule update --init
-cd firmware
-mkdir build
-cd build
-cmake ..
-# or, to build for the custom boards:
-# PICO_BOARD=remapper cmake ..
-make
+Roll → Cursor X
+Pitch → Cursor Y  
+Shake → Left click
 ```
 
-To compile the nRF52 firmware, you can either follow [Nordic's setup instructions](https://docs.nordicsemi.com/bundle/ncs-latest/page/nrf/installation.html) and then `west build -b seeed_xiao_nrf52840` to compile the firmware, or you can use Docker with a command like this (start from the top level of the repository or adjust the path accordingly):
-
+### Gamepad (XInput/Switch)
 ```
-docker run --rm -v $(pwd):/workdir/project -w /workdir/project/firmware-bluetooth nordicplayground/nrfconnect-sdk:v2.2-branch west build -b seeed_xiao_nrf52840
-```
-
-For the Xiao nRF52840 Sense onboard sensors, build with the Sense overlay and config fragment:
-
-```
-docker run --rm -v $(pwd):/workdir/project -w /workdir/project/firmware-bluetooth nordicplayground/nrfconnect-sdk:v2.2-branch west build -b seeed_xiao_nrf52840 -d build-xiao-sense -- -DOVERLAY_CONFIG=boards/arm/seeed_xiao_nrf52840/seeed_xiao_nrf52840_sense.conf -DDTC_OVERLAY_FILE=boards/arm/seeed_xiao_nrf52840/seeed_xiao_nrf52840_sense.overlay
+Roll → Left stick X
+Pitch → Left stick Y
+Shake → Button A
 ```
 
-## License
+### Racing (Steering only)
+```
+Roll → Left stick X (steering)
+```
 
-The software in this repository is licensed under the [MIT License](LICENSE), unless stated otherwise.
+Load these from **Examples** in the web config tool.
 
-The hardware designs in this repository are licensed under the Creative Commons Attribution 4.0 International license ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), unless stated otherwise.
+---
+
+## 📡 Bluetooth Mode
+
+MoveStick can also act as a **Bluetooth hub**, connecting multiple devices wirelessly and merging all inputs into one controller.
+
+Supported devices:
+- DualSense / Xbox controllers
+- Xbox Adaptive Controller
+- PS Access controller
+- Bluetooth keyboards/mice
+- BLE wheelchair joysticks
+
+See [BLUETOOTH.md](./BLUETOOTH.md) for setup instructions.
+
+---
+
+## 🤝 Credits
+
+- **[HID Remapper](https://github.com/jfedor2/hid-remapper)** by jfedor — the foundation this project builds on
+- **[PlayAbility](https://www.playability.gg/)** — gyroscope/IMU features and integration
+- **[HitClic](https://hitclic.shop/)** — hardware design and distribution
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](./LICENSE)
+
+---
+
+## 🔗 Related Projects
+
+- [PlayAbility Adaptive Software](https://www.playability.gg/) — Face/voice/head control for gaming
+- [HitClic Handigamer](https://hitclic.shop/) — Adaptive gaming hardware
+- [Xbox Adaptive Controller](https://www.xbox.com/accessories/controllers/xbox-adaptive-controller) — Microsoft's adaptive gaming platform
+
+---
+
+**Questions?** Open an issue or reach out on [Discord](https://discord.playability.gg)
