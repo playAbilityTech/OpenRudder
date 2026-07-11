@@ -13,7 +13,6 @@ device.send_feature_report(add_crc(data))
 data = get_feature_report(device, REPORT_ID_CONFIG, CONFIG_SIZE + 1)
 
 (
-    report_id,
     version,
     flags,
     unmapped_passthrough_layer_mask,
@@ -28,8 +27,32 @@ data = get_feature_report(device, REPORT_ID_CONFIG, CONFIG_SIZE + 1)
     macro_entry_duration,
     quirk_count,
     *_,
-    crc,
-) = struct.unpack("<BBBBLHLLBLBBBHBL", data)
+) = struct.unpack_from("<BBBLHLLBLBBBH", data, 1)
+crc = struct.unpack_from("<L", data, len(data) - 4)[0]
+check_crc(data, crc)
+
+data = struct.pack("<BBB26B", REPORT_ID_CONFIG, CONFIG_VERSION, GET_SENSOR_CONFIG, *([0] * 26))
+device.send_feature_report(add_crc(data))
+
+data = get_feature_report(device, REPORT_ID_CONFIG, CONFIG_SIZE + 1)
+(
+    sensor_flags,
+    imu_filter_buffer_size,
+    imu_pitch_deadzone,
+    imu_roll_deadzone,
+    imu_yaw_deadzone,
+    imu_pitch_pos_max_angle,
+    imu_pitch_neg_max_angle,
+    imu_roll_pos_max_angle,
+    imu_roll_neg_max_angle,
+    imu_yaw_pos_max_angle,
+    imu_yaw_neg_max_angle,
+    imu_twist_deadzone,
+    imu_twist_max_rate,
+    imu_yaw_leak_time,
+    *_,
+) = struct.unpack_from("<15B", data, 1)
+crc = struct.unpack_from("<L", data, len(data) - 4)[0]
 check_crc(data, crc)
 
 config = {
@@ -45,6 +68,23 @@ config = {
     "gpio_output_mode": 1 if (flags & GPIO_OUTPUT_MODE_FLAG) else 0,
     "input_labels": 0,
     "normalize_gamepad_inputs": bool(flags & NORMALIZE_GAMEPAD_INPUTS_FLAG),
+    "imu_enabled": bool(sensor_flags & SENSOR_CONFIG_FLAG_ENABLE),
+    "imu_filter_buffer_size": imu_filter_buffer_size,
+    "imu_pitch_deadzone": imu_pitch_deadzone,
+    "imu_roll_deadzone": imu_roll_deadzone,
+    "imu_yaw_deadzone": imu_yaw_deadzone,
+    "imu_pitch_pos_max_angle": imu_pitch_pos_max_angle,
+    "imu_pitch_neg_max_angle": imu_pitch_neg_max_angle,
+    "imu_roll_pos_max_angle": imu_roll_pos_max_angle,
+    "imu_roll_neg_max_angle": imu_roll_neg_max_angle,
+    "imu_yaw_pos_max_angle": imu_yaw_pos_max_angle,
+    "imu_yaw_neg_max_angle": imu_yaw_neg_max_angle,
+    "imu_twist_deadzone": imu_twist_deadzone,
+    "imu_twist_max_rate": imu_twist_max_rate,
+    "imu_yaw_leak_time": imu_yaw_leak_time,
+    "imu_roll_inverted": bool(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_ROLL),
+    "imu_pitch_inverted": bool(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_PITCH),
+    "imu_yaw_inverted": bool(sensor_flags & SENSOR_CONFIG_FLAG_INVERT_YAW),
     "mappings": [],
     "macros": [],
     "expressions": [],

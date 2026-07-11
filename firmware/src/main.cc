@@ -18,6 +18,12 @@
 #include <pico/unique_id.h>
 
 #include "activity_led.h"
+#ifdef REMAPPER_BLUETOOTH
+#if !defined(REMAPPER_BLUETOOTH_NUS_ONLY)
+#include "ble_central.h"
+#endif
+#include "flash_layout.h"
+#endif
 #include "config.h"
 #include "crc.h"
 #include "descriptor_parser.h"
@@ -29,10 +35,12 @@
 #include "remapper.h"
 #include "tick.h"
 
+#if defined(REMAPPER_BLUETOOTH)
+#define CONFIG_OFFSET_IN_FLASH REMAPPER_CONFIG_OFFSET_IN_FLASH
+#elif PICO_RP2350
 // RP2350 UF2s wipe the last sector of flash every time
 // because of RP2350-E10 errata mitigation. So we put
 // the config one sector down.
-#if PICO_RP2350
 #define CONFIG_OFFSET_IN_FLASH (PICO_FLASH_SIZE_BYTES - PERSISTED_CONFIG_SIZE - 4096)
 #else
 #define CONFIG_OFFSET_IN_FLASH (PICO_FLASH_SIZE_BYTES - PERSISTED_CONFIG_SIZE)
@@ -204,9 +212,24 @@ void reset_to_bootloader() {
 }
 
 void pair_new_device() {
+#if defined(REMAPPER_BLUETOOTH) && !defined(REMAPPER_BLUETOOTH_NUS_ONLY)
+    ble_central_pair_new_device();
+#endif
 }
 
 void clear_bonds() {
+#if defined(REMAPPER_BLUETOOTH) && !defined(REMAPPER_BLUETOOTH_NUS_ONLY)
+    ble_central_clear_bonds();
+#endif
+}
+
+void recenter_imu() {
+}
+
+void pause_imu() {
+}
+
+void resume_imu() {
 }
 
 void my_mutexes_init() {
@@ -265,7 +288,9 @@ int main() {
         bool new_report;
         read_report(&new_report, &tick);
         if (new_report) {
+#ifndef REMAPPER_BLUETOOTH
             activity_led_on();
+#endif
         }
         if (their_descriptor_updated) {
             update_their_descriptor_derivates();
@@ -274,7 +299,9 @@ int main() {
         if (tick) {
             bool gpio_state_changed = read_gpio(time_us_64());
             if (gpio_state_changed) {
+#ifndef REMAPPER_BLUETOOTH
                 activity_led_on();
+#endif
             }
 #ifdef ADC_ENABLED
             read_adc();
@@ -320,7 +347,9 @@ int main() {
 
         print_stats_maybe();
 
+#ifndef REMAPPER_BLUETOOTH
         activity_led_off_maybe();
+#endif
     }
 
     return 0;

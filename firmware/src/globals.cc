@@ -32,6 +32,23 @@ bool ignore_auth_dev_inputs = false;
 uint8_t macro_entry_duration = 0;  // 0 means 1ms
 uint8_t gpio_output_mode = 0;
 bool normalize_gamepad_inputs = true;
+bool imu_enabled = true;
+uint8_t imu_filter_buffer_size = 10;
+uint8_t imu_pitch_deadzone = 0;
+uint8_t imu_roll_deadzone = 0;
+uint8_t imu_yaw_deadzone = 0;
+uint8_t imu_pitch_pos_max_angle = 45;
+uint8_t imu_pitch_neg_max_angle = 45;
+uint8_t imu_roll_pos_max_angle = 45;
+uint8_t imu_roll_neg_max_angle = 45;
+uint8_t imu_yaw_pos_max_angle = 45;
+uint8_t imu_yaw_neg_max_angle = 45;
+uint8_t imu_twist_deadzone = 2;
+uint8_t imu_twist_max_rate = 90;
+uint8_t imu_yaw_leak_time = 3;
+bool imu_roll_inverted = false;
+bool imu_pitch_inverted = false;
+bool imu_yaw_inverted = false;
 
 std::vector<mapping_config11_t> config_mappings;
 

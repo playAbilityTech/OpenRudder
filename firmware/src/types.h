@@ -32,7 +32,18 @@ enum class ConfigCommand : int8_t {
     CLEAR_QUIRKS = 23,
     ADD_QUIRK = 24,
     GET_QUIRK = 25,
+    SET_SENSOR_CONFIG = 26,
+    GET_SENSOR_CONFIG = 27,
+    RECENTER_IMU = 28,
+    PAUSE_IMU = 29,
+    RESUME_IMU = 30,
+    GET_BLE_PEER = 31,
 };
+
+#define SENSOR_CONFIG_FLAG_ENABLE 0x01
+#define SENSOR_CONFIG_FLAG_INVERT_ROLL 0x02
+#define SENSOR_CONFIG_FLAG_INVERT_PITCH 0x04
+#define SENSOR_CONFIG_FLAG_INVERT_YAW 0x08
 
 struct usage_def_t {
     uint8_t report_id;
@@ -196,12 +207,12 @@ struct register_ptrs_t {
 struct __attribute__((packed)) set_feature_t {
     uint8_t version;
     ConfigCommand command;
-    uint8_t data[26];
+    uint8_t data[30];
     uint32_t crc32;
 };
 
 struct __attribute__((packed)) get_feature_t {
-    uint8_t data[28];
+    uint8_t data[32];
     uint32_t crc32;
 };
 
@@ -310,9 +321,59 @@ struct __attribute__((packed)) persist_config_v12_t {
 
 typedef persist_config_v12_t persist_config_v13_t;
 
-typedef persist_config_v13_t persist_config_v18_t;
+struct __attribute__((packed)) persist_config_v19_t {
+    uint8_t version;
+    uint8_t flags;
+    uint8_t unmapped_passthrough_layer_mask;
+    uint32_t partial_scroll_timeout;
+    uint16_t mapping_count;
+    uint8_t interval_override;
+    uint32_t tap_hold_threshold;
+    uint8_t gpio_debounce_time_ms;
+    uint8_t our_descriptor_number;
+    uint8_t macro_entry_duration;
+    uint16_t quirk_count;
+    uint8_t imu_angle_clamp_limit;
+    uint8_t imu_filter_buffer_size;
+    uint8_t imu_roll_inverted;
+    uint8_t imu_pitch_inverted;
+};
 
-typedef persist_config_v18_t persist_config_t;
+typedef persist_config_v19_t persist_config_v18_t;
+
+struct __attribute__((packed)) persist_config_v20_t {
+    uint8_t version;
+    uint8_t flags;
+    uint8_t unmapped_passthrough_layer_mask;
+    uint32_t partial_scroll_timeout;
+    uint16_t mapping_count;
+    uint8_t interval_override;
+    uint32_t tap_hold_threshold;
+    uint8_t gpio_debounce_time_ms;
+    uint8_t our_descriptor_number;
+    uint8_t macro_entry_duration;
+    uint16_t quirk_count;
+};
+
+typedef persist_config_v20_t persist_config_t;
+
+struct __attribute__((packed)) sensor_config_t {
+    uint8_t flags;
+    uint8_t imu_filter_buffer_size;
+    uint8_t imu_pitch_deadzone;
+    uint8_t imu_roll_deadzone;
+    uint8_t imu_yaw_deadzone;
+    uint8_t imu_pitch_pos_max_angle;
+    uint8_t imu_pitch_neg_max_angle;
+    uint8_t imu_roll_pos_max_angle;
+    uint8_t imu_roll_neg_max_angle;
+    uint8_t imu_yaw_pos_max_angle;
+    uint8_t imu_yaw_neg_max_angle;
+    uint8_t imu_twist_deadzone;
+    uint8_t imu_twist_max_rate;
+    uint8_t imu_yaw_leak_time;
+    uint8_t reserved0;
+};
 
 struct __attribute__((packed)) get_config_t {
     uint8_t version;
@@ -340,6 +401,12 @@ struct __attribute__((packed)) set_config_t {
     uint8_t our_descriptor_number;
     uint8_t macro_entry_duration;
 };
+
+static_assert(sizeof(persist_config_v20_t) == 19, "persist_config_v20_t layout changed");
+static_assert(sizeof(sensor_config_t) == 15, "sensor_config_t layout changed");
+static_assert(sizeof(get_config_t) <= 32, "get_config_t exceeds feature report payload");
+static_assert(sizeof(set_config_t) <= 30, "set_config_t exceeds feature report payload");
+static_assert(sizeof(sensor_config_t) <= 30, "sensor_config_t exceeds feature report payload");
 
 struct __attribute__((packed)) get_indexed_t {
     uint32_t requested_index;
@@ -394,6 +461,11 @@ struct __attribute__((packed)) get_expr_t {
     uint32_t requested_expr_elem;
 };
 
+struct __attribute__((packed)) get_ble_peer_t {
+    uint32_t requested_peer;
+    uint32_t name_offset;
+};
+
 struct __attribute__((packed)) append_to_expr_t {
     uint8_t expr;
     uint8_t nelems;
@@ -429,6 +501,39 @@ struct __attribute__((packed)) monitor_report_t {
     uint8_t report_id;
     monitor_report_item_t items[7];
 };
+
+enum class BlePeerKind : uint8_t {
+    UNKNOWN = 0,
+    HID = 1,
+    NUS = 2,
+};
+
+#define BLE_PEER_FLAG_BONDED 0x01
+#define BLE_PEER_FLAG_CONNECTED 0x02
+#define BLE_PEER_FLAG_NAME_KNOWN 0x04
+#define BLE_PEER_FLAG_PNP_ID_KNOWN 0x08
+#define BLE_PEER_FLAG_ENCRYPTED 0x10
+
+#define BLE_PEER_NAME_CHUNK_SIZE 11
+
+struct __attribute__((packed)) ble_peer_info_t {
+    uint8_t present;
+    uint8_t total_count;
+    BlePeerKind kind;
+    uint8_t flags;
+    uint8_t addr_type;
+    uint8_t addr[6];
+    uint8_t port;
+    uint8_t vid_source;
+    uint16_t vid;
+    uint16_t pid;
+    uint16_t product_version;
+    uint8_t name_total_len;
+    uint8_t name_chunk_len;
+    char name_chunk[BLE_PEER_NAME_CHUNK_SIZE];
+};
+
+static_assert(sizeof(ble_peer_info_t) <= 32, "ble_peer_info_t exceeds feature report payload");
 
 struct __attribute__((packed)) uint16_val_t {
     uint16_t val;

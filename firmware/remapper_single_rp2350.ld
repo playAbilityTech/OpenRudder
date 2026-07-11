@@ -277,6 +277,8 @@ SECTIONS
         KEEP(*(.stack*))
     } > SCRATCH_Y
 
+    /* End of flash: BTstack TLV bank, then persisted remapper config (see flash_layout.h). */
+
     .flash_end : {
         KEEP(*(.embedded_end_block*))
         PROVIDE(__flash_binary_end = .);

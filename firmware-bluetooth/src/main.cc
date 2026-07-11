@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stddef.h>
+#include <string.h>
 
 #include <bluetooth/gatt_dm.h>
 #include <bluetooth/scan.h>
@@ -9,6 +10,7 @@
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/uuid.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -20,12 +22,14 @@
 #include <zephyr/usb/class/usb_hid.h>
 #include <zephyr/usb/usb_device.h>
 
+#include "ble_nus.h"
 #include "config.h"
 #include "descriptor_parser.h"
 #include "globals.h"
 #include "our_descriptor.h"
 #include "platform.h"
 #include "remapper.h"
+#include "sensor_inputs.h"
 
 LOG_MODULE_REGISTER(remapper, LOG_LEVEL_DBG);
 
@@ -36,10 +40,12 @@ static const int CLEAR_BONDS_BUTTON_PRESS_MS = 3000;
 
 // these macros don't work in C++ when used directly ("taking address of temporary array")
 static auto const BT_UUID_HIDS_ = (struct bt_uuid_16) BT_UUID_INIT_16(BT_UUID_HIDS_VAL);
+static auto const BT_UUID_PNP_ID_ = (struct bt_uuid_16) BT_UUID_INIT_16(0x2A50);
 static auto BT_ADDR_LE_ANY_ = BT_ADDR_LE_ANY[0];
 static auto BT_CONN_LE_CREATE_CONN_ = BT_CONN_LE_CREATE_CONN[0];
 
 static struct bt_hogp hogps[CONFIG_BT_MAX_CONN];
+static struct bt_gatt_read_params pnp_read_params[CONFIG_BT_MAX_CONN];
 
 static K_SEM_DEFINE(usb_sem0, 1, 1);
 static K_SEM_DEFINE(usb_sem1, 1, 1);
@@ -53,8 +59,12 @@ static bool get_report_response_ready = false;
 static const struct device* hid_dev0;
 static const struct device* hid_dev1;  // config interface
 
+// Forward declarations
+static bool do_send_report(uint8_t interface, const uint8_t* report_with_id, uint8_t len);
+
 struct report_type {
     uint16_t interface;
+    uint8_t external_report_id;
     uint8_t len;
     uint8_t data[65];
 };
@@ -87,6 +97,17 @@ K_MSGQ_DEFINE(disconnected_q, sizeof(struct disconnected_type), CONFIG_BT_MAX_CO
 K_MSGQ_DEFINE(set_report_q, sizeof(struct set_report_type), 8, 4);
 ATOMIC_DEFINE(tick_pending, 1);
 
+bool submit_report(uint16_t interface, uint8_t external_report_id,
+                   const uint8_t* payload, uint8_t payload_len) {
+    struct report_type report = {
+        .interface = interface,
+        .external_report_id = external_report_id,
+        .len = payload_len,
+    };
+    memcpy(report.data, payload, payload_len);
+    return k_msgq_put(&report_q, &report, K_NO_WAIT) == 0;
+}
+
 #define SW0_NODE DT_ALIAS(sw0)
 #if !DT_NODE_HAS_STATUS(SW0_NODE, okay)
 #error "Unsupported board: sw0 devicetree alias is not defined"
@@ -112,12 +133,347 @@ static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 static bool scanning = false;
 static bool peers_only = true;
 
+static const uint8_t BLE_PEER_STORED_NAME_MAX = 48;
+static const uint8_t BLE_PEER_RECORD_MAX = CONFIG_BT_MAX_PAIRED + CONFIG_BT_MAX_CONN + 1;
+
+struct ble_peer_metadata_t {
+    bool in_use;
+    uint8_t addr_type;
+    uint8_t addr[6];
+    BlePeerKind kind;
+    uint8_t flags;
+    uint8_t vid_source;
+    uint16_t vid;
+    uint16_t pid;
+    uint16_t product_version;
+    uint8_t name_len;
+    char name[BLE_PEER_STORED_NAME_MAX];
+};
+
+struct ble_peer_record_t {
+    bool present;
+    uint8_t addr_type;
+    uint8_t addr[6];
+    BlePeerKind kind;
+    uint8_t flags;
+    uint8_t port;
+    uint8_t vid_source;
+    uint16_t vid;
+    uint16_t pid;
+    uint16_t product_version;
+    uint8_t name_len;
+    char name[BLE_PEER_STORED_NAME_MAX];
+};
+
+static ble_peer_metadata_t ble_peer_metadata[BLE_PEER_RECORD_MAX];
+static ble_peer_record_t ble_peer_snapshot[BLE_PEER_RECORD_MAX];
+static uint8_t ble_peer_snapshot_count;
+
+static void copy_addr_display_order(uint8_t out[6], const bt_addr_le_t* addr) {
+    for (int i = 0; i < 6; i++) {
+        out[i] = addr->a.val[5 - i];
+    }
+}
+
+static bool same_display_addr(uint8_t type_a, const uint8_t addr_a[6], uint8_t type_b, const uint8_t addr_b[6]) {
+    return (type_a == type_b) && (memcmp(addr_a, addr_b, 6) == 0);
+}
+
+static ble_peer_metadata_t* metadata_for_addr(const bt_addr_le_t* addr, bool create) {
+    uint8_t display_addr[6];
+    copy_addr_display_order(display_addr, addr);
+
+    for (int i = 0; i < BLE_PEER_RECORD_MAX; i++) {
+        if (ble_peer_metadata[i].in_use &&
+            same_display_addr(ble_peer_metadata[i].addr_type, ble_peer_metadata[i].addr,
+                              addr->type, display_addr)) {
+            return &ble_peer_metadata[i];
+        }
+    }
+
+    if (!create) {
+        return NULL;
+    }
+
+    for (int i = 0; i < BLE_PEER_RECORD_MAX; i++) {
+        if (!ble_peer_metadata[i].in_use) {
+            memset(&ble_peer_metadata[i], 0, sizeof(ble_peer_metadata[i]));
+            ble_peer_metadata[i].in_use = true;
+            ble_peer_metadata[i].addr_type = addr->type;
+            memcpy(ble_peer_metadata[i].addr, display_addr, sizeof(ble_peer_metadata[i].addr));
+            ble_peer_metadata[i].kind = BlePeerKind::UNKNOWN;
+            return &ble_peer_metadata[i];
+        }
+    }
+
+    return NULL;
+}
+
+static void copy_peer_name(char* dst, uint8_t* dst_len, const char* src, uint8_t src_len) {
+    uint8_t len = src_len;
+    if (len > BLE_PEER_STORED_NAME_MAX) {
+        len = BLE_PEER_STORED_NAME_MAX;
+    }
+    memcpy(dst, src, len);
+    *dst_len = len;
+}
+
+static void remember_peer_name(const bt_addr_le_t* addr, const char* name, uint8_t len) {
+    ble_peer_metadata_t* metadata = metadata_for_addr(addr, true);
+    if (!metadata || len == 0) {
+        return;
+    }
+    metadata->kind = BlePeerKind::HID;
+    metadata->flags |= BLE_PEER_FLAG_NAME_KNOWN;
+    copy_peer_name(metadata->name, &metadata->name_len, name, len);
+}
+
+struct adv_name_parse_ctx {
+    const bt_addr_le_t* addr;
+};
+
+static bool adv_name_parse_cb(struct bt_data* data, void* user_data) {
+    adv_name_parse_ctx* ctx = (adv_name_parse_ctx*) user_data;
+    if ((data->type == BT_DATA_NAME_COMPLETE) || (data->type == BT_DATA_NAME_SHORTENED)) {
+        remember_peer_name(ctx->addr, (const char*) data->data, data->data_len);
+        return false;
+    }
+    return true;
+}
+
+static void remember_advertised_name(const bt_addr_le_t* addr, struct net_buf_simple* adv_data) {
+    if (!adv_data) {
+        return;
+    }
+    adv_name_parse_ctx ctx = { .addr = addr };
+    struct net_buf_simple adv_data_copy = *adv_data;
+    bt_data_parse(&adv_data_copy, adv_name_parse_cb, &ctx);
+}
+
+static void mark_peer_kind(const bt_addr_le_t* addr, BlePeerKind kind) {
+    ble_peer_metadata_t* metadata = metadata_for_addr(addr, true);
+    if (metadata) {
+        metadata->kind = kind;
+    }
+}
+
+static void set_peer_encrypted(const bt_addr_le_t* addr, bool encrypted) {
+    ble_peer_metadata_t* metadata = metadata_for_addr(addr, true);
+    if (!metadata) {
+        return;
+    }
+    if (encrypted) {
+        metadata->flags |= BLE_PEER_FLAG_ENCRYPTED;
+    } else {
+        metadata->flags &= ~BLE_PEER_FLAG_ENCRYPTED;
+    }
+}
+
+static uint8_t pnp_id_read_cb(struct bt_conn* conn, uint8_t err, struct bt_gatt_read_params* params,
+                              const void* data, uint16_t length) {
+    if (err || !data || (length < 7)) {
+        return BT_GATT_ITER_STOP;
+    }
+
+    ble_peer_metadata_t* metadata = metadata_for_addr(bt_conn_get_dst(conn), true);
+    if (!metadata) {
+        return BT_GATT_ITER_STOP;
+    }
+
+    const uint8_t* pnp_id = (const uint8_t*) data;
+    metadata->kind = BlePeerKind::HID;
+    metadata->flags |= BLE_PEER_FLAG_PNP_ID_KNOWN;
+    metadata->vid_source = pnp_id[0];
+    metadata->vid = sys_get_le16(pnp_id + 1);
+    metadata->pid = sys_get_le16(pnp_id + 3);
+    metadata->product_version = sys_get_le16(pnp_id + 5);
+
+    return BT_GATT_ITER_STOP;
+}
+
+static void read_pnp_id(struct bt_conn* conn) {
+    uint8_t conn_idx = bt_conn_index(conn);
+    if (conn_idx >= CONFIG_BT_MAX_CONN) {
+        return;
+    }
+
+    struct bt_gatt_read_params* params = &pnp_read_params[conn_idx];
+    memset(params, 0, sizeof(*params));
+    params->func = pnp_id_read_cb;
+    params->handle_count = 0;
+    params->by_uuid.uuid = (const struct bt_uuid*) &BT_UUID_PNP_ID_;
+    params->by_uuid.start_handle = 0x0001;
+    params->by_uuid.end_handle = 0xffff;
+
+    int err = bt_gatt_read(conn, params);
+    if (err) {
+        LOG_DBG("bt_gatt_read PnP ID returned %d", err);
+    }
+}
+
+static void apply_metadata_to_record(ble_peer_record_t* record) {
+    for (int i = 0; i < BLE_PEER_RECORD_MAX; i++) {
+        ble_peer_metadata_t* metadata = &ble_peer_metadata[i];
+        if (!metadata->in_use ||
+            !same_display_addr(metadata->addr_type, metadata->addr,
+                               record->addr_type, record->addr)) {
+            continue;
+        }
+        if (metadata->kind != BlePeerKind::UNKNOWN) {
+            record->kind = metadata->kind;
+        }
+        record->flags |= metadata->flags & (BLE_PEER_FLAG_NAME_KNOWN | BLE_PEER_FLAG_PNP_ID_KNOWN | BLE_PEER_FLAG_ENCRYPTED);
+        record->vid_source = metadata->vid_source;
+        record->vid = metadata->vid;
+        record->pid = metadata->pid;
+        record->product_version = metadata->product_version;
+        record->name_len = metadata->name_len;
+        memcpy(record->name, metadata->name, sizeof(record->name));
+        return;
+    }
+}
+
+static ble_peer_record_t* snapshot_find_or_add(uint8_t addr_type, const uint8_t addr[6]) {
+    for (int i = 0; i < ble_peer_snapshot_count; i++) {
+        if (same_display_addr(ble_peer_snapshot[i].addr_type, ble_peer_snapshot[i].addr,
+                              addr_type, addr)) {
+            return &ble_peer_snapshot[i];
+        }
+    }
+
+    if (ble_peer_snapshot_count >= BLE_PEER_RECORD_MAX) {
+        return NULL;
+    }
+
+    ble_peer_record_t* record = &ble_peer_snapshot[ble_peer_snapshot_count++];
+    memset(record, 0, sizeof(*record));
+    record->present = true;
+    record->addr_type = addr_type;
+    memcpy(record->addr, addr, sizeof(record->addr));
+    record->kind = BlePeerKind::UNKNOWN;
+    record->port = 0xFF;
+    apply_metadata_to_record(record);
+    return record;
+}
+
+static ble_peer_record_t* snapshot_find_or_add(const bt_addr_le_t* addr) {
+    uint8_t display_addr[6];
+    copy_addr_display_order(display_addr, addr);
+    return snapshot_find_or_add(addr->type, display_addr);
+}
+
+struct snapshot_bond_ctx {
+    uint8_t bond_index;
+};
+
+static void snapshot_add_bond_cb(const bt_bond_info* info, void* user_data) {
+    snapshot_bond_ctx* ctx = (snapshot_bond_ctx*) user_data;
+    ctx->bond_index++;
+    ble_peer_record_t* record = snapshot_find_or_add(&info->addr);
+    if (!record) {
+        return;
+    }
+    record->flags |= BLE_PEER_FLAG_BONDED;
+    record->port = ctx->bond_index;
+    apply_metadata_to_record(record);
+}
+
+static void snapshot_add_connection_cb(struct bt_conn* conn, void* data) {
+    (void) data;
+    struct bt_conn_info info;
+
+    if (bt_conn_get_info(conn, &info) || (info.role != BT_CONN_ROLE_CENTRAL)) {
+        return;
+    }
+
+    const bt_addr_le_t* addr = bt_conn_get_dst(conn);
+    mark_peer_kind(addr, BlePeerKind::HID);
+
+    ble_peer_record_t* record = snapshot_find_or_add(addr);
+    if (!record) {
+        return;
+    }
+    record->kind = BlePeerKind::HID;
+    record->flags |= BLE_PEER_FLAG_CONNECTED;
+    apply_metadata_to_record(record);
+}
+
+static void snapshot_add_nus_peer(void) {
+    bt_addr_le_t addr;
+    bool encrypted = false;
+    if (!ble_nus_get_peer(&addr, &encrypted)) {
+        return;
+    }
+
+    mark_peer_kind(&addr, BlePeerKind::NUS);
+    ble_peer_record_t* record = snapshot_find_or_add(&addr);
+    if (!record) {
+        return;
+    }
+    record->kind = BlePeerKind::NUS;
+    record->flags |= BLE_PEER_FLAG_CONNECTED;
+    if (encrypted) {
+        record->flags |= BLE_PEER_FLAG_ENCRYPTED;
+    }
+    apply_metadata_to_record(record);
+}
+
+static void build_ble_peer_snapshot(void) {
+    memset(ble_peer_snapshot, 0, sizeof(ble_peer_snapshot));
+    ble_peer_snapshot_count = 0;
+
+    snapshot_bond_ctx bond_ctx = { .bond_index = 0 };
+    bt_foreach_bond(BT_ID_DEFAULT, snapshot_add_bond_cb, &bond_ctx);
+    bt_conn_foreach(BT_CONN_TYPE_LE, snapshot_add_connection_cb, NULL);
+    snapshot_add_nus_peer();
+}
+
+bool get_ble_peer_info(uint32_t index, uint32_t name_offset, ble_peer_info_t* peer_info) {
+    memset(peer_info, 0, sizeof(*peer_info));
+    build_ble_peer_snapshot();
+    peer_info->total_count = ble_peer_snapshot_count;
+
+    if (index >= ble_peer_snapshot_count) {
+        return true;
+    }
+
+    ble_peer_record_t* record = &ble_peer_snapshot[index];
+    peer_info->present = 1;
+    peer_info->kind = record->kind;
+    peer_info->flags = record->flags;
+    peer_info->addr_type = record->addr_type;
+    memcpy(peer_info->addr, record->addr, sizeof(peer_info->addr));
+    peer_info->port = record->port;
+    peer_info->vid_source = record->vid_source;
+    peer_info->vid = record->vid;
+    peer_info->pid = record->pid;
+    peer_info->product_version = record->product_version;
+    peer_info->name_total_len = record->name_len;
+    if (name_offset < record->name_len) {
+        uint8_t remaining = record->name_len - name_offset;
+        uint8_t chunk_len = remaining > BLE_PEER_NAME_CHUNK_SIZE ? BLE_PEER_NAME_CHUNK_SIZE : remaining;
+        peer_info->name_chunk_len = chunk_len;
+        memcpy(peer_info->name_chunk, record->name + name_offset, chunk_len);
+    }
+
+    return true;
+}
+
 static struct bt_le_conn_param* conn_param = BT_LE_CONN_PARAM(6, 6, 44, 400);
 
 static void activity_led_off_work_fn(struct k_work* work) {
     gpio_pin_set_dt(&led0, false);
 }
 static K_WORK_DELAYABLE_DEFINE(activity_led_off_work, activity_led_off_work_fn);
+
+void activity_led_flash(uint32_t duration_ms) {
+    k_work_reschedule(&activity_led_off_work, K_MSEC(duration_ms));
+    gpio_pin_set_dt(&led0, true);
+}
+
+void activity_led_off(void) {
+    gpio_pin_set_dt(&led0, false);
+}
 
 enum class LedMode {
     OFF = 0,
@@ -196,6 +552,12 @@ static void process_bond(const struct bt_bond_info* info, void* user_data) {
 }
 
 static void count_conn_cb(struct bt_conn* conn, void* data) {
+    struct bt_conn_info info;
+
+    if (bt_conn_get_info(conn, &info) || (info.role != BT_CONN_ROLE_CENTRAL)) {
+        return;
+    }
+
     (*((int*) data))++;
 }
 
@@ -284,6 +646,7 @@ static void scan_filter_match(struct bt_scan_device_info* device_info, struct bt
     }
 
     bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
+    remember_advertised_name(device_info->recv_info->addr, device_info->adv_data);
 
     LOG_INF("%s address: %s connectable: %s", __func__, addr, connectable ? "yes" : "no");
 }
@@ -303,6 +666,7 @@ static void scan_filter_no_match(struct bt_scan_device_info* device_info, bool c
 
     if (device_info->recv_info->adv_type == BT_GAP_ADV_TYPE_ADV_DIRECT_IND) {
         bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
+        remember_advertised_name(device_info->recv_info->addr, device_info->adv_data);
         LOG_INF("Direct advertising received from %s", addr);
         scan_stop();  // XXX
 
@@ -394,18 +758,27 @@ static void button_cb(const struct device* dev, struct gpio_callback* cb, uint32
 static void connected(struct bt_conn* conn, uint8_t conn_err) {
     char addr[BT_ADDR_LE_STR_LEN];
 
-    scanning = false;
-    count_connections();
-    set_led_mode(LedMode::BLINK);
-
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
     if (conn_err) {
         LOG_ERR("Failed to connect to %s (conn_err=%u).", addr, conn_err);
         k_work_reschedule(&scan_start_work, K_MSEC(SCAN_DELAY_MS));
-
         return;
     }
+
+    if (ble_nus_handle_connected(conn)) {
+        return;
+    }
+
+    struct bt_conn_info info;
+    if (!CHK(bt_conn_get_info(conn, &info))) {
+        return;
+    }
+
+    mark_peer_kind(bt_conn_get_dst(conn), BlePeerKind::HID);
+    scanning = false;
+    count_connections();
+    set_led_mode(LedMode::BLINK);
 
     LOG_INF("%s", addr);
 
@@ -417,9 +790,14 @@ static void disconnected(struct bt_conn* conn, uint8_t reason) {
 
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
+    if (ble_nus_handle_disconnected(conn, reason)) {
+        return;
+    }
+
     LOG_INF("%s (reason=%u)", addr, reason);
 
     uint8_t conn_idx = bt_conn_index(conn);
+    set_peer_encrypted(bt_conn_get_dst(conn), false);
 
     if (bt_hogp_assign_check(&hogps[conn_idx])) {
         bt_hogp_release(&hogps[conn_idx]);
@@ -436,13 +814,19 @@ static void disconnected(struct bt_conn* conn, uint8_t reason) {
 static void security_changed(struct bt_conn* conn, bt_security_t level, enum bt_security_err err) {
     char addr[BT_ADDR_LE_STR_LEN];
 
+    if (ble_nus_handle_security_changed(conn, level, err)) {
+        return;
+    }
+
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
     if (!err) {
         LOG_INF("%s, level=%u.", addr, level);
+        set_peer_encrypted(bt_conn_get_dst(conn), level >= BT_SECURITY_L2);
         peers_only = true;
         gatt_discover(conn);
     } else {
+        set_peer_encrypted(bt_conn_get_dst(conn), false);
         LOG_ERR("security failed: %s, level=%u, err=%d", addr, level, err);
     }
 }
@@ -503,11 +887,19 @@ static uint8_t hogp_notify_cb(struct bt_hogp* hogp, struct bt_hogp_rep_info* rep
     }
 
     static struct report_type buf;
-    buf.interface = hogp_index(hogp) << 8;
-    buf.len = bt_hogp_rep_size(rep) + 1;
-    buf.data[0] = bt_hogp_rep_id(rep);
+    size_t payload_len = bt_hogp_rep_size(rep);
+    if (payload_len > sizeof(buf.data)) {
+        LOG_WRN("HOGP report too large: %u", (unsigned int) payload_len);
+        return BT_GATT_ITER_CONTINUE;
+    }
 
-    memcpy(buf.data + 1, data, buf.len);
+    buf.interface = hogp_index(hogp) << 8;
+    // HOGP report values do not include the Report ID byte; it comes from the
+    // Report Reference descriptor. Keep it separate so no-ID reports stay aligned.
+    buf.external_report_id = bt_hogp_rep_id(rep);
+    buf.len = (uint8_t) payload_len;
+
+    memcpy(buf.data, data, payload_len);
     if (k_msgq_put(&report_q, &buf, K_NO_WAIT)) {
         //        printk("error in k_msg_put(report_q\n");
     }
@@ -515,18 +907,37 @@ static uint8_t hogp_notify_cb(struct bt_hogp* hogp, struct bt_hogp_rep_info* rep
     return BT_GATT_ITER_CONTINUE;
 }
 
-// XXX is this ready for simultaneous connection setup? is discovery ready? do we care?
-static struct descriptor_type their_descriptor;
+static struct descriptor_type their_descriptors[CONFIG_BT_MAX_CONN];
 
 static void hogp_map_read_cb(struct bt_hogp* hogp, uint8_t err, const uint8_t* data, size_t size, size_t offset) {
-    if (data == NULL) {
-        their_descriptor.size = offset;
-        their_descriptor.conn_idx = hogp_index(hogp);
-        CHK(k_msgq_put(&descriptor_q, &their_descriptor, K_NO_WAIT));
+    int8_t conn_idx = hogp_index(hogp);
+    if (conn_idx < 0) {
         return;
     }
 
-    memcpy(their_descriptor.data + offset, data, size);
+    if (err) {
+        LOG_ERR("HOGP descriptor read failed for conn_idx=%d err=%d", conn_idx, err);
+        return;
+    }
+
+    struct descriptor_type* their_descriptor = &their_descriptors[conn_idx];
+
+    if (data == NULL) {
+        their_descriptor->size = offset;
+        their_descriptor->conn_idx = conn_idx;
+        CHK(k_msgq_put(&descriptor_q, their_descriptor, K_NO_WAIT));
+        return;
+    }
+
+    if (offset >= sizeof(their_descriptor->data)) {
+        LOG_WRN("HOGP descriptor too large for conn_idx=%d; dropping remainder", conn_idx);
+        return;
+    }
+    if ((offset + size) > sizeof(their_descriptor->data)) {
+        LOG_WRN("HOGP descriptor too large for conn_idx=%d; truncating", conn_idx);
+        size = sizeof(their_descriptor->data) - offset;
+    }
+    memcpy(their_descriptor->data + offset, data, size);
 
     bt_hogp_map_read(hogp, hogp_map_read_cb, offset + size, K_NO_WAIT);
 }
@@ -560,6 +971,7 @@ static void hogp_ready_work_fn(struct k_work* work) {
         bt_foreach_bond(BT_ID_DEFAULT, find_bond_cb, &find_bond);
         LOG_DBG("found bond idx: %d", find_bond.found_idx);
         device_connected_callback(bt_conn_index(bt_hogp_conn(item.hogp)) << 8, 1, 1, find_bond.found_idx);
+        read_pnp_id(bt_hogp_conn(item.hogp));
 
         while (NULL != (rep = bt_hogp_rep_next(item.hogp, rep))) {
             if (bt_hogp_rep_type(rep) == BT_HIDS_REPORT_TYPE_INPUT) {
@@ -685,6 +1097,7 @@ static void int_out_ready_cb0(const struct device* dev) {
     uint32_t len;
     if (CHK(hid_int_ep_read(hid_dev0, buf.data, sizeof(buf.data), &len))) {
         buf.interface = OUR_OUT_INTERFACE;
+        buf.external_report_id = 0;
         buf.len = len;
         CHK(k_msgq_put(&report_q, &buf, K_NO_WAIT));
     }
@@ -712,12 +1125,14 @@ static bool do_send_report(uint8_t interface, const uint8_t* report_with_id, uin
         report_with_id++;
         len--;
     }
+    bool sent = false;
     if (interface == 0) {
-        return CHK(hid_int_ep_write(hid_dev0, report_with_id, len, NULL));
+        sent = CHK(hid_int_ep_write(hid_dev0, report_with_id, len, NULL));
+    } else if (interface == 1) {
+        sent = CHK(hid_int_ep_write(hid_dev1, report_with_id, len, NULL));
     }
-    if (interface == 1) {
-        return CHK(hid_int_ep_write(hid_dev1, report_with_id, len, NULL));
-    }
+    ble_nus_usb_report_sent(interface, sent);
+    return sent;
 }
 
 static void button_init() {
@@ -862,6 +1277,18 @@ void clear_bonds() {
     k_work_submit(&clear_bonds_work);
 }
 
+void recenter_imu() {
+    sensor_inputs_recalibrate_orientation();
+}
+
+void pause_imu() {
+    sensor_inputs_pause_imu();
+}
+
+void resume_imu() {
+    sensor_inputs_resume_imu();
+}
+
 void my_mutexes_init() {
     for (int i = 0; i < (int8_t) MutexId::N; i++) {
         k_mutex_init(&mutexes[i]);
@@ -905,6 +1332,7 @@ int main() {
     my_mutexes_init();
     button_init();
     leds_init();
+    
     bt_init();
     CHK(settings_subsys_init());
     CHK(settings_register(&our_settings_handlers));
@@ -914,6 +1342,30 @@ int main() {
     scan_init();
     parse_our_descriptor();
     set_mapping_from_config();
+    ble_nus_init(submit_report);
+    update_their_descriptor_derivates();
+    their_descriptor_updated = false;
+    ble_nus_start_advertising();
+
+    // Initialize onboard sensors after mapping system is ready.
+#if SENSOR_INPUTS_AVAILABLE
+    if (imu_enabled) {
+        if (!sensor_inputs_init()) {
+            LOG_ERR("Failed to initialize onboard sensors");
+        } else {
+            set_mapping_from_config();
+            their_descriptor_updated = false;
+        }
+    } else {
+        LOG_INF("Onboard sensors disabled in configuration - skipping sensor initialization");
+    }
+#else
+    if (imu_enabled) {
+        LOG_ERR("Onboard sensors enabled, but this firmware was built without onboard sensor support");
+    } else {
+        LOG_INF("Onboard sensors not available on this board - skipping sensor initialization");
+    }
+#endif
 
     k_work_reschedule(&scan_start_work, K_MSEC(SCAN_DELAY_MS));
 
@@ -927,7 +1379,9 @@ int main() {
 
     while (true) {
         if (!process_pending && !k_msgq_get(&report_q, &incoming_report, K_NO_WAIT)) {
-            handle_received_report(incoming_report.data, incoming_report.len, (uint16_t) incoming_report.interface);
+            handle_received_report(incoming_report.data, incoming_report.len,
+                                   (uint16_t) incoming_report.interface,
+                                   incoming_report.external_report_id);
             process_pending = true;
         }
         if (atomic_test_and_clear_bit(tick_pending, 0)) {

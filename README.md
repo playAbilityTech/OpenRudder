@@ -59,6 +59,7 @@ custom board v7 | [remapper\_board\_v7.uf2](https://github.com/jfedor2/hid-remap
 custom board v8 | [remapper\_board\_v8.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_board_v8.uf2) |
 Feather nRF52840 Express | [remapper_adafruit_feather_nrf52840.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_adafruit_feather_nrf52840.uf2) |
 Xiao nRF52840 | [remapper_seeed_xiao_nrf52840.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_seeed_xiao_nrf52840.uf2) |
+Xiao nRF52840 Sense | [remapper_seeed_xiao_nrf52840_sense.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_seeed_xiao_nrf52840_sense.uf2) |
 serial | [remapper_serial.uf2](https://github.com/jfedor2/hid-remapper/releases/latest/download/remapper_serial.uf2) |
 
 For boards not listed above, use the same file name you used when flashing it for the first time.
@@ -87,6 +88,12 @@ To compile the nRF52 firmware, you can either follow [Nordic's setup instruction
 
 ```
 docker run --rm -v $(pwd):/workdir/project -w /workdir/project/firmware-bluetooth nordicplayground/nrfconnect-sdk:v2.2-branch west build -b seeed_xiao_nrf52840
+```
+
+For the Xiao nRF52840 Sense onboard sensors, build with the Sense overlay and config fragment:
+
+```
+docker run --rm -v $(pwd):/workdir/project -w /workdir/project/firmware-bluetooth nordicplayground/nrfconnect-sdk:v2.2-branch west build -b seeed_xiao_nrf52840 -d build-xiao-sense -- -DOVERLAY_CONFIG=boards/arm/seeed_xiao_nrf52840/seeed_xiao_nrf52840_sense.conf -DDTC_OVERLAY_FILE=boards/arm/seeed_xiao_nrf52840/seeed_xiao_nrf52840_sense.overlay
 ```
 
 ## License
